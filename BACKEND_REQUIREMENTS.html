@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexveero — Backend Requirements</title>
+<style>
+  :root{
+    --primary:#6C47FF;--accent:#FF4D9D;--bg:#F6F5FB;--surface:#fff;--border:#ECE9F3;
+    --ink:#17141F;--muted:#6E6880;--faint:#9B93AD;
+    --red:#E5484D;--orange:#F59E0B;--green:#1FA971;--tint:#ECE7FB;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    font-size:15px;line-height:1.55}
+  h1,h2,h3,.sora{font-family:'Sora','Plus Jakarta Sans',sans-serif}
+  a{color:var(--primary);text-decoration:none}
+  code{font-family:'SF Mono',ui-monospace,'Menlo',monospace;font-size:12.5px;
+    background:#f0edf9;color:#4a34b0;padding:2px 6px;border-radius:6px;white-space:nowrap}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 80px}
+
+  /* header */
+  header{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;padding:40px 0 34px;margin-bottom:0}
+  header .wrap{padding-bottom:0}
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85;font-weight:700}
+  header h1{font-size:34px;font-weight:800;margin:10px 0 8px}
+  header p{margin:0;opacity:.95;max-width:640px;font-size:15px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+  .meta span{background:rgba(255,255,255,.16);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600}
+
+  /* summary tiles */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0 10px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px}
+  .tile .n{font-family:'Sora';font-weight:800;font-size:28px}
+  .tile .l{color:var(--muted);font-size:13px;margin-top:2px}
+  .tile.r{border-top:3px solid var(--red)} .tile.o{border-top:3px solid var(--orange)} .tile.g{border-top:3px solid var(--green)}
+
+  /* intro */
+  .note{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin:16px 0}
+  .note b{color:var(--ink)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0 4px;font-size:13.5px;color:var(--muted)}
+  .legend b{color:var(--ink)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:999px;vertical-align:middle;margin-right:6px}
+  .dot.r{background:var(--red)}.dot.o{background:var(--orange)}.dot.g{background:var(--green)}
+
+  /* section nav */
+  nav.toc{position:sticky;top:0;z-index:10;background:rgba(246,245,251,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);padding:10px 0;margin:22px 0 8px}
+  nav.toc .wrap{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:0}
+  nav.toc a{font-size:12.5px;font-weight:700;color:var(--muted);background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:6px 12px}
+  nav.toc a:hover{color:var(--primary);border-color:var(--primary)}
+
+  section{margin-top:30px}
+  section h2{font-size:20px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  section .subtitle{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+
+  /* requirement card */
+  .req{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px;margin-bottom:14px;
+    border-left:4px solid var(--border)}
+  .req.r{border-left-color:var(--red)} .req.o{border-left-color:var(--orange)} .req.g{border-left-color:var(--green)}
+  .req .head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .id{font-family:'Sora';font-weight:800;font-size:13px;color:var(--primary);background:var(--tint);border-radius:8px;padding:3px 9px}
+  .req h3{font-size:16px;font-weight:700;margin:0}
+  .chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .chip.r{background:#fdeaea;color:var(--red)} .chip.o{background:#fff4e0;color:var(--orange)} .chip.g{background:#eafaf2;color:var(--green)}
+  .kv{margin-top:12px;display:grid;grid-template-columns:120px 1fr;gap:6px 14px}
+  .kv .k{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);padding-top:2px}
+  .kv .v{font-size:14px}
+  .kv .v ul{margin:4px 0 0;padding-left:18px} .kv .v li{margin:3px 0}
+  .decision{margin-top:12px;background:#fbf7ff;border:1px dashed var(--primary);border-radius:10px;padding:9px 12px;font-size:13px;color:#4a34b0}
+
+  footer{margin-top:40px;color:var(--faint);font-size:12.5px;text-align:center}
+  @media(max-width:640px){.tiles{grid-template-columns:1fr}.kv{grid-template-columns:1fr}.kv .k{padding-top:8px}}
+  @media print{nav.toc{display:none}header{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Nexveero · v2</div>
+    <h1>What we need from Backend</h1>
+    <p>Gaps between the <b>design</b> (Lyra.dc + Chat-App flow) and the <b>current API</b> — every screen or behaviour that has no endpoint yet, or one too small to cover it. Supersedes the old MISSING_APIS list.</p>
+    <div class="meta"><span>Base: /api/v1</span><span>Auth: Bearer {token}</span><span>176 endpoints today</span><span>Updated 2026-09-06</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tiles">
+    <div class="tile r"><div class="n">10</div><div class="l">🔴 Block a built screen</div></div>
+    <div class="tile o"><div class="n">7</div><div class="l">🟠 Needed for an upcoming module</div></div>
+    <div class="tile g"><div class="n">2</div><div class="l">🟢 Nice-to-have</div></div>
+  </div>
+
+  <div class="note">
+    <b>How to read each item:</b> <b>Design</b> = what the design/PDF shows · <b>API today</b> = what exists now · <b>Needed</b> = the endpoint(s)/fields we need · <b>Check existing</b> = likely alternate names to look for first — if it already exists under another path, just tell us the path and we re-point one line, no screen changes.
+  </div>
+  <div class="note">
+    <b>Conventions (match the existing API):</b> <code>Authorization: Bearer {token}</code>, <code>Accept: application/json</code>, success bodies wrapped in <code>{ "data": … }</code>, validation errors as <code>422 { message, errors:{field:[…]} }</code>, list endpoints paginated (<code>?page</code>, <code>?per_page</code>, <code>meta</code>).
+  </div>
+  <div class="legend">
+    <span><span class="dot r"></span><b>🔴</b> blocks a built screen</span>
+    <span><span class="dot o"></span><b>🟠</b> needed for an upcoming module</span>
+    <span><span class="dot g"></span><b>🟢</b> nice-to-have</span>
+  </div>
+</div>
+
+<nav class="toc"><div class="wrap">
+  <a href="#a">A · Auth</a>
+  <a href="#b">B · Business Profile</a>
+  <a href="#c">C · View Business</a>
+  <a href="#d">D · Status</a>
+  <a href="#e">E · Feed/Posts</a>
+  <a href="#f">F · Search</a>
+  <a href="#g">G · Notifications</a>
+  <a href="#h">H · Orders & Payment</a>
+  <a href="#i">I · Account</a>
+  <a href="#j">J · Chat depth</a>
+</div></nav>
+
+<div class="wrap">
+
+<!-- A -->
+<section id="a">
+  <h2>A · Auth &amp; Onboarding</h2>
+
+  <div class="req r">
+    <div class="head"><span class="id">A1</span><h3>Multi-identifier login (username / mobile / email)</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Login accepts <b>username, mobile, or email</b> + password.</div>
+      <div class="k">API today</div><div class="v"><code>POST /auth/login</code> accepts <b>email only</b>.</div>
+      <div class="k">Needed</div><div class="v">A single <code>identifier</code> field resolving to email / phone / username — <code>POST /auth/login { "identifier", "password" }</code>.</div>
+      <div class="k">Check existing</div><div class="v">Does <code>email</code> already accept a phone/username? Is there a <code>username</code> column?</div>
+    </div>
+  </div>
+
+  <div class="req r">
+    <div class="head"><span class="id">A2</span><h3>OTP — email + mobile verification</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Register → <b>Email OTP</b> → <b>Mobile OTP</b> before submit. (We plan to run these on <b>Firebase</b> client-side; this item is only if you want OTP enforced <b>server-side</b>.)</div>
+      <div class="k">API today</div><div class="v">No OTP endpoint of any kind.</div>
+      <div class="k">Needed</div><div class="v">Either <code>POST /auth/otp/send</code> + <code>POST /auth/otp/verify</code>, <em>or</em> accept Firebase ID tokens on <code>POST /auth/register</code> (<code>email_verified</code>, <code>phone_verified</code> / <code>firebase_id_token</code>) so the server trusts client OTP.</div>
+      <div class="k">Check existing</div><div class="v"><code>verify</code>, <code>otp</code>, <code>2fa</code>, <code>email/verify</code>, <code>phone/verify</code>, <code>activation</code>.</div>
+    </div>
+    <div class="decision">⟢ Decision needed: OTP via <b>Firebase (client)</b> or <b>backend</b>?</div>
+  </div>
+
+  <div class="req o">
+    <div class="head"><span class="id">A3</span><h3>Forgot / reset / change password</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">"Forgot password?" → reset code → new password; Settings → change password.</div>
+      <div class="k">API today</div><div class="v">None.</div>
+      <div class="k">Needed</div><div class="v"><code>POST /auth/password/forgot</code>, <code>POST /auth/password/reset</code>, <code>POST /auth/password/change</code>.</div>
+      <div class="k">Check existing</div><div class="v">Laravel defaults <code>/forgot-password</code>, <code>/reset-password</code>, <code>password/email</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- B -->
+<section id="b">
+  <h2>B · Business Profile (KYC / verified / premium)</h2>
+
+  <div class="req r">
+    <div class="head"><span class="id">B1</span><h3>Full business-details form (~18 fields)</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">After approval, "Fill Business Details" — address, products, company type, MSME no., logo, social links, description (≤1020), association, tags (5–10), website, etc.</div>
+      <div class="k">API today</div><div class="v"><code>POST /profile</code> accepts <b>only</b> <code>name</code>, <code>bio</code>, <code>phone</code>, <code>avatar</code>.</div>
+      <div class="k">Needed</div><div class="v">Extend <code>POST /profile</code> (or new <code>POST /profile/business</code>) to accept <code>business_name</code>, <code>company_type</code>, <code>msme_number</code>, <code>logo</code>, <code>website</code>, <code>description</code>, <code>association</code>, <code>address</code>/<code>city</code>/<code>state</code>/<code>pincode</code>, <code>products[]</code>, <code>tag_ids[]</code>, <code>social_links</code>. Return them all on <code>GET /profile</code>.</div>
+      <div class="k">Check existing</div><div class="v"><code>business</code>, <code>company</code>, <code>kyc</code>, <code>onboarding/details</code>.</div>
+    </div>
+  </div>
+
+  <div class="req o">
+    <div class="head"><span class="id">B2</span><h3>Verified / Premium badges</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v"><b>Verified</b> badge (after admin approval) + <b>Premium</b> badge (active subscription).</div>
+      <div class="k">API today</div><div class="v"><code>approval_status</code> + <code>subscription</code> object exist; no explicit <code>is_verified</code>.</div>
+      <div class="k">Needed</div><div class="v"><code>is_verified</code> (bool) — or confirm we derive: verified = <code>approval_status==approved</code>, premium = <code>subscription.status==active</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- C -->
+<section id="c">
+  <h2>C · View Business tab (directory)</h2>
+  <div class="req o">
+    <div class="head"><span class="id">C1</span><h3>Business showcase + search by product/tag</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">"View Business" tab — business cards (images/short videos), search by products &amp; tags, boost business.</div>
+      <div class="k">API today</div><div class="v"><code>GET /users</code> is name/phone directory only; <code>GET /loads</code> is the post feed.</div>
+      <div class="k">Needed</div><div class="v"><code>GET /businesses?search=&amp;tag_id=&amp;product=&amp;page=</code> (logo, name, verified, products, tags, media) + <code>POST /businesses/{id}/boost</code>. Confirm if boost bills wallet credits.</div>
+      <div class="k">Check existing</div><div class="v"><code>businesses</code>, <code>directory</code>, <code>vendors</code>, <code>shops</code>, <code>catalog</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- D -->
+<section id="d">
+  <h2>D · Status tab (24h stories)</h2>
+  <div class="req r">
+    <div class="head"><span class="id">D1</span><h3>Stories CRUD + view tracking</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">"Status" tab — 24h stories, contacts-only visibility, ads interleaved.</div>
+      <div class="k">API today</div><div class="v">Nothing (<code>/status</code>, <code>/stories</code> absent).</div>
+      <div class="k">Needed</div><div class="v"><code>GET /stories</code> (contacts' active, grouped), <code>POST /stories</code> (image/video, 24h expiry), <code>POST /stories/{id}/view</code>, <code>GET /stories/{id}/viewers</code>, <code>DELETE /stories/{id}</code>.</div>
+      <div class="k">Check existing</div><div class="v"><code>stories</code>, <code>status</code>, <code>moments</code>, <code>reels</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- E -->
+<section id="e">
+  <h2>E · Feed / Posts (Loads)</h2>
+  <div class="req o">
+    <div class="head"><span class="id">E1</span><h3>Multi-image (carousel) + video posts, mark-sold, auto-inactive</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Post types carousel, video, video+text; mark as sold / deal closed; inactivate (+ 7-day auto-inactive).</div>
+      <div class="k">API today</div><div class="v"><code>POST /loads</code> — single image + text is what we wired.</div>
+      <div class="k">Needed</div><div class="v">Confirm <code>POST /loads</code> accepts <code>media[]</code> (multiple + video) &amp; a <code>post_type</code>; plus <code>POST /loads/{id}/sold</code> and <code>PATCH /loads/{id}</code> <code>status=active|inactive</code>. Confirm if 7-day auto-inactive is server-side.</div>
+      <div class="k">Check existing</div><div class="v"><code>media[]</code>, <code>attachments[]</code>, <code>loads/{id}/close</code>, <code>mark-sold</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- F -->
+<section id="f">
+  <h2>F · Search</h2>
+  <div class="req g">
+    <div class="head"><span class="id">F1</span><h3>Suggested businesses / people</h3><span class="chip g">🟢 nice-to-have</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Search shows a SUGGESTED section.</div>
+      <div class="k">API today</div><div class="v">No <code>suggested</code> endpoint.</div>
+      <div class="k">Needed</div><div class="v"><code>GET /search/suggested</code> (or <code>GET /businesses/suggested</code>).</div>
+      <div class="k">Check existing</div><div class="v"><code>suggested</code>, <code>recommended</code> (<code>/groups/recommended</code> exists — a users/business equivalent?).</div>
+    </div>
+  </div>
+</section>
+
+<!-- G -->
+<section id="g">
+  <h2>G · Notifications</h2>
+  <div class="req r">
+    <div class="head"><span class="id">G1</span><h3>Notifications list</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Notifications screen (offers, approvals, chat, system).</div>
+      <div class="k">API today</div><div class="v">Only per-feature unread counts; <b>no notifications feed</b>.</div>
+      <div class="k">Needed</div><div class="v"><code>GET /notifications?page=</code>, <code>POST /notifications/{id}/read</code>, <code>POST /notifications/read-all</code>, <code>GET /notifications/unread-count</code>.</div>
+      <div class="k">Check existing</div><div class="v"><code>notifications</code>, <code>activity</code>, <code>inbox</code>, <code>alerts</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- H -->
+<section id="h">
+  <h2>H · Orders &amp; Payment</h2>
+  <div class="req r">
+    <div class="head"><span class="id">H1</span><h3>Orders (per-order transactions)</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Orders list, order detail, per-order payment, order status in chat.</div>
+      <div class="k">API today</div><div class="v"><b>No <code>/orders</code></b> — only wallet credits (<code>/wallet</code>, <code>/transactions</code>).</div>
+      <div class="k">Needed</div><div class="v"><code>GET /orders</code>, <code>GET /orders/{id}</code>, <code>POST /orders</code> (from a load/offer), <code>PATCH /orders/{id}</code> (status) — or confirm the app is <b>wallet-credits only</b> and Orders is dropped.</div>
+      <div class="k">Check existing</div><div class="v"><code>orders</code>, <code>bookings</code>, <code>deals</code>, <code>purchases</code>.</div>
+    </div>
+  </div>
+
+  <div class="req o">
+    <div class="head"><span class="id">H2</span><h3>UPI payment + refund states</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Payment adds UPI, plus refund (requested/completed), retry, change-method.</div>
+      <div class="k">API today</div><div class="v">Wallet top-up via Razorpay (<code>/wallet/verify</code>, <code>/wallet/demo-topup</code>); no UPI-specific flow, no refund.</div>
+      <div class="k">Needed</div><div class="v">Confirm Razorpay covers UPI (then just a UI method), and add <code>POST /wallet/refund</code> / <code>GET /refunds</code> (or order-level refund) if refunds are real.</div>
+      <div class="k">Check existing</div><div class="v"><code>refund</code>, <code>payment/upi</code>, Razorpay UPI intent flow.</div>
+    </div>
+  </div>
+</section>
+
+<!-- I -->
+<section id="i">
+  <h2>I · Account &amp; Settings</h2>
+  <div class="req o">
+    <div class="head"><span class="id">I1</span><h3>Delete account</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Settings → delete account.</div>
+      <div class="k">API today</div><div class="v">None (<code>DELETE /auth/login</code> only revokes the current token).</div>
+      <div class="k">Needed</div><div class="v"><code>DELETE /account</code> (soft-delete + data handling per policy).</div>
+      <div class="k">Check existing</div><div class="v"><code>account</code>, <code>users/me</code>, <code>profile</code> DELETE.</div>
+    </div>
+  </div>
+
+  <div class="req g">
+    <div class="head"><span class="id">I2</span><h3>Online / last-seen visibility toggle</h3><span class="chip g">🟢 nice-to-have</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Toggle to hide online / last-seen.</div>
+      <div class="k">API today</div><div class="v"><code>last_seen_at</code> is a static field; no privacy toggle (and no realtime presence endpoint).</div>
+      <div class="k">Needed</div><div class="v">A profile setting <code>show_last_seen</code> (bool) on <code>POST /profile</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- J -->
+<section id="j">
+  <h2>J · Chat depth <span class="chip r" style="font-size:11px">confirmed missing</span></h2>
+  <p class="subtitle">Most chat is backed (labels, questions/inquiry, PIN, groups + join-requests, broadcasts, image/video/document/voice attachments). These specific message actions were <b>checked and have no endpoints</b> — needed to build the design's chat depth.</p>
+
+  <div class="req r">
+    <div class="head"><span class="id">J1</span><h3>Edit &amp; delete message</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">Design</div><div class="v">Edit within 1h, delete within 24h.</div>
+      <div class="k">API today</div><div class="v">No <code>PATCH</code>/<code>DELETE /conversations/{id}/messages/{msgId}</code>; no <code>edited_at</code>/<code>deleted_at</code> fields.</div>
+      <div class="k">Needed</div><div class="v"><code>PATCH /conversations/{id}/messages/{msgId}</code> (body) + <code>DELETE …/{msgId}</code>, with <code>edited_at</code>/<code>deleted_at</code> on the message.</div>
+    </div>
+  </div>
+
+  <div class="req r">
+    <div class="head"><span class="id">J2</span><h3>Star message · pin chat</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">API today</div><div class="v">No star/pin endpoints.</div>
+      <div class="k">Needed</div><div class="v"><code>POST/DELETE …/messages/{id}/star</code> + <code>GET /messages/starred</code>; <code>POST/DELETE /conversations/{id}/pin</code>.</div>
+    </div>
+  </div>
+
+  <div class="req r">
+    <div class="head"><span class="id">J3</span><h3>Block / unblock user</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">API today</div><div class="v">No block endpoint.</div>
+      <div class="k">Needed</div><div class="v"><code>POST /users/{id}/block</code>, <code>DELETE /users/{id}/block</code>, <code>GET /users/blocked</code>.</div>
+    </div>
+  </div>
+
+  <div class="req r">
+    <div class="head"><span class="id">J4</span><h3>Location &amp; contact share</h3><span class="chip r">🔴 blocks</span></div>
+    <div class="kv">
+      <div class="k">API today</div><div class="v">Message attachments support image/video/audio/file only — no <b>location</b> or <b>contact</b> type.</div>
+      <div class="k">Needed</div><div class="v">Accept structured message types on <code>POST /conversations/{id}/messages</code>: <code>type=location {lat,lng,label}</code> and <code>type=contact {name,phone}</code>.</div>
+    </div>
+  </div>
+
+  <div class="req o">
+    <div class="head"><span class="id">J5</span><h3>Realtime + push</h3><span class="chip o">🟠 upcoming</span></div>
+    <div class="kv">
+      <div class="k">API today</div><div class="v"><code>/realtime/config</code>, <code>/socket/auth</code>, <code>POST /devices</code> exist.</div>
+      <div class="k">Needed</div><div class="v">Confirm the socket server + FCM sender for live message delivery &amp; push. Blocked on <b>Firebase</b> config from the client side.</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Nexveero · Backend requirements · generated from BACKEND_REQUIREMENTS.md · 2026-09-06<br>
+  🔴 blocks a built screen &nbsp;·&nbsp; 🟠 needed for an upcoming module &nbsp;·&nbsp; 🟢 nice-to-have
+</footer>
+</div>
+</body>
+</html>

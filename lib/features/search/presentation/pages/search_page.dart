@@ -1,0 +1,327 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/di/injection.dart';
+import '../../../../core/models/user.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/media_url.dart';
+import '../../../../core/utils/result.dart';
+import '../../../../core/widgets/widgets.dart';
+import '../../../chat/domain/repositories/chat_repository.dart';
+import '../cubit/search_cubit.dart';
+
+/// People search (design "Search"): a search field, a RECENT list when empty,
+/// and RESULTS as you type. Content/post search awaits an API text query
+/// (MISSING_APIS "Search") — this searches people via GET /users?q=.
+class SearchPage extends StatelessWidget {
+  const SearchPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => sl<SearchCubit>(),
+      child: const _SearchView(),
+    );
+  }
+}
+
+class _SearchView extends StatefulWidget {
+  const _SearchView();
+
+  @override
+  State<_SearchView> createState() => _SearchViewState();
+}
+
+class _SearchViewState extends State<_SearchView> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.only(right: AppSpacing.lg),
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.nexveero.elevated,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Row(
+              children: [
+                Icon(Icons.search, size: 20, color: context.nexveero.textSecondary),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (v) => context.read<SearchCubit>().onQueryChanged(v),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText: 'Search people',
+                    ),
+                  ),
+                ),
+                BlocSelector<SearchCubit, SearchState, bool>(
+                  selector: (s) => s.query.isNotEmpty,
+                  builder: (context, hasText) => hasText
+                      ? GestureDetector(
+                          onTap: () {
+                            _controller.clear();
+                            context.read<SearchCubit>().clearQuery();
+                          },
+                          child: Icon(Icons.close,
+                              size: 18, color: context.nexveero.textSecondary),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      body: BlocBuilder<SearchCubit, SearchState>(
+        builder: (context, state) {
+          switch (state.status) {
+            case SearchStatus.idle:
+              return _RecentList(recents: state.recents, controller: _controller);
+            case SearchStatus.searching:
+              return const LoadingView();
+            case SearchStatus.error:
+              return ErrorView(
+                message: state.errorMessage ?? 'Search failed',
+                onRetry: () => context.read<SearchCubit>().runRecent(state.query),
+              );
+            case SearchStatus.empty:
+              return EmptyView(
+                title: 'No results',
+                subtitle: 'No people match “${state.query.trim()}”.',
+                icon: Icons.person_search_outlined,
+              );
+            case SearchStatus.results:
+              return _Results(users: state.results);
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label, {this.action});
+  final String label;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label.toUpperCase(),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: context.nexveero.textSecondary, letterSpacing: 1)),
+          ?action,
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentList extends StatelessWidget {
+  const _RecentList({required this.recents, required this.controller});
+  final List<String> recents;
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    if (recents.isEmpty) {
+      return const EmptyView(
+        title: 'Search Nexveero',
+        subtitle: 'Find people by name or number.',
+        icon: Icons.search,
+      );
+    }
+    return ListView(
+      children: [
+        _SectionHeader(
+          'Recent',
+          action: TextButton(
+            onPressed: () => context.read<SearchCubit>().clearRecents(),
+            child: const Text('Clear all'),
+          ),
+        ),
+        for (final r in recents)
+          ListTile(
+            leading: Icon(Icons.history, color: context.nexveero.textSecondary),
+            title: Text(r),
+            trailing: IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => context.read<SearchCubit>().removeRecent(r),
+            ),
+            onTap: () {
+              controller.text = r;
+              context.read<SearchCubit>().runRecent(r);
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _Results extends StatelessWidget {
+  const _Results({required this.users});
+  final List<User> users;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: users.length + 1,
+      itemBuilder: (context, i) {
+        if (i == 0) return const _SectionHeader('Results');
+        return _UserRow(user: users[i - 1]);
+      },
+    );
+  }
+}
+
+class _UserRow extends StatelessWidget {
+  const _UserRow({required this.user});
+  final User user;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = (user.bio ?? '').isNotEmpty
+        ? user.bio!
+        : (user.isCreator ? 'Creator' : 'Member');
+    return ListTile(
+      leading: AppAvatar(
+        name: user.name,
+        imageUrl: MediaUrl.resolve(user.avatarUrl),
+        size: 44,
+      ),
+      title: Text(user.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: user.isCreator
+          ? Icon(Icons.verified, size: 18, color: Theme.of(context).colorScheme.primary)
+          : null,
+      onTap: () => _showPeek(context, user),
+    );
+  }
+
+  void _showPeek(BuildContext context, User user) {
+    AppOverlays.sheet<void>(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppAvatar(
+            name: user.name,
+            imageUrl: MediaUrl.resolve(user.avatarUrl),
+            size: 72,
+            ring: user.isCreator,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(user.name, style: Theme.of(ctx).textTheme.titleLarge),
+          if ((user.bio ?? '').isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(user.bio!, textAlign: TextAlign.center),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          AppButton(
+            label: 'View profile',
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.push(AppRoutes.userProfile, extra: user.id);
+            },
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            label: 'Message',
+            variant: AppButtonVariant.outline,
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _startChat(context, user);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Starts (or reopens) a 1:1 chat. If the peer has Set-PIN on, prompts for
+  /// their 4-digit PIN first, then opens the thread.
+  Future<void> _startChat(BuildContext context, User user) async {
+    final repo = sl<ChatRepository>();
+    final pinReq = await repo.chatPinRequired(user.id);
+    if (!context.mounted) return;
+
+    String? pin;
+    if (pinReq.valueOrNull == true) {
+      pin = await _askPin(context, user.name);
+      if (pin == null) return; // cancelled
+    }
+
+    final result = await repo.startChat(user.id, pin: pin);
+    if (!context.mounted) return;
+    switch (result) {
+      case Success(value: final conversation):
+        context.push(AppRoutes.chatThread, extra: conversation);
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
+
+  Future<String?> _askPin(BuildContext context, String name) {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter chat PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$name protects new chats with a PIN. Enter their 4-digit PIN '
+                'to start the conversation.'),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              obscureText: true,
+              decoration: const InputDecoration(counterText: '', hintText: '••••'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final v = ctrl.text.trim();
+              if (v.length == 4) Navigator.of(ctx).pop(v);
+            },
+            child: const Text('Start chat'),
+          ),
+        ],
+      ),
+    );
+  }
+}
