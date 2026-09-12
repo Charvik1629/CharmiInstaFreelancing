@@ -21,12 +21,20 @@ import '../widgets/tag_picker_sheet.dart';
 /// category today, so extra images upload as just the cover and Location/Tags
 /// are gated (see MISSING_APIS #6). Pops with the created [Load].
 class CreatePostPage extends StatelessWidget {
-  const CreatePostPage({super.key});
+  const CreatePostPage({super.key, this.editLoad});
+
+  /// When set, the composer edits this post (PUT /loads/{id}) instead of
+  /// creating a new one.
+  final Load? editLoad;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<CreatePostCubit>()..loadCategories(),
+      create: (_) {
+        final cubit = sl<CreatePostCubit>()..loadCategories();
+        if (editLoad != null) cubit.seedForEdit(editLoad!);
+        return cubit;
+      },
       child: const _CreatePostView(),
     );
   }
@@ -114,7 +122,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
             onPressed: () => context.pop(),
           ),
           centerTitle: true,
-          title: const Text('New post'),
+          title: Text(
+              context.select((CreatePostCubit c) => c.state.editing)
+                  ? 'Edit post'
+                  : 'New post'),
           actions: const [_PublishAction()],
         ),
         body: SafeArea(
@@ -144,7 +155,9 @@ class _PublishAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<CreatePostCubit, CreatePostState>(
       buildWhen: (p, c) =>
-          p.canSubmit != c.canSubmit || p.isSubmitting != c.isSubmitting,
+          p.canSubmit != c.canSubmit ||
+          p.isSubmitting != c.isSubmitting ||
+          p.editing != c.editing,
       builder: (context, state) {
         if (state.isSubmitting) {
           return const Padding(
@@ -160,7 +173,8 @@ class _PublishAction extends StatelessWidget {
           child: TextButton(
             onPressed:
                 state.canSubmit ? () => context.read<CreatePostCubit>().submit() : null,
-            child: const Text('Publish', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(state.editing ? 'Save' : 'Publish',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
         );
       },

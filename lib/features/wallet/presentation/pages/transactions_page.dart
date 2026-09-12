@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -125,6 +127,7 @@ class _TxRow extends StatelessWidget {
             .titleMedium
             ?.copyWith(color: color, fontWeight: FontWeight.w700),
       ),
+      onTap: () => context.push(AppRoutes.paymentDetail, extra: tx),
     );
   }
 }

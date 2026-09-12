@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
 
-/// Bottom sheet to collect a free-text report reason (POST /loads/{id}/reports).
-/// Returns the reason on submit, or null if dismissed.
+/// Report a post (POST /loads/{id}/reports). Matches the design's Report modal
+/// (HTML 1783–1866): title, post-title subtitle, "Reason / details" label and a
+/// `Cancel | Submit` row. Returns the reason on submit, or null if dismissed.
 class ReportSheet extends StatefulWidget {
-  const ReportSheet._();
+  const ReportSheet._({this.subtitle});
+  final String? subtitle;
 
-  static Future<String?> show(BuildContext context) {
+  static Future<String?> show(BuildContext context, {String? subtitle}) {
     return AppOverlays.sheet<String>(
       context,
-      builder: (_) => const ReportSheet._(),
+      builder: (_) => ReportSheet._(subtitle: subtitle),
     );
   }
 
@@ -36,7 +39,18 @@ class _ReportSheetState extends State<ReportSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('Report post', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: AppSpacing.md),
+        if ((widget.subtitle ?? '').isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(widget.subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: context.nexveero.textSecondary)),
+        ],
+        const SizedBox(height: AppSpacing.lg),
+        const SheetFieldLabel('Reason / details'),
         AppTextField(
           controller: _controller,
           hint: 'Tell us what’s wrong with this post…',
@@ -45,11 +59,25 @@ class _ReportSheetState extends State<ReportSheet> {
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: AppSpacing.lg),
-        AppButton(
-          label: 'Submit report',
-          onPressed: _valid
-              ? () => Navigator.of(context).pop(_controller.text.trim())
-              : null,
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Cancel',
+                variant: AppButtonVariant.outline,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: AppButton(
+                label: 'Submit',
+                onPressed: _valid
+                    ? () => Navigator.of(context).pop(_controller.text.trim())
+                    : null,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.sm),
       ],

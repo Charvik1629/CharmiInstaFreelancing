@@ -18,6 +18,9 @@ class AppRoutes {
   static const String businessDetails = '/business-details';
   static const String businessProfile = '/business-profile';
   static const String chatThread = '/chat';
+  static const String contactInfo = '/contact-info';
+  static const String enterPin = '/enter-pin';
+  static const String deleteAccount = '/delete-account';
   static const String manageLabels = '/chat-labels';
   static const String settings = '/settings';
   static const String notifications = '/notifications';
@@ -25,6 +28,11 @@ class AppRoutes {
   static const String subscription = '/subscription';
   static const String wallet = '/wallet';
   static const String transactions = '/transactions';
+  static const String paymentDetail = '/payment-detail';
+  static const String businessDirectory = '/businesses';
+  static const String adminBroadcastLimits = '/admin/broadcast-limits';
+  static const String adminBroadcastGroups = '/admin/broadcast-groups';
+  static const String createBroadcastGroup = '/admin/broadcast-groups/new';
   static const String adminUsers = '/admin/users';
   static const String adminSubscriptions = '/admin/subscriptions';
   static const String adminTags = '/admin/tags';

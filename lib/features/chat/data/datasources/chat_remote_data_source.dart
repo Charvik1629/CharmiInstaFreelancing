@@ -48,6 +48,22 @@ abstract class ChatRemoteDataSource {
     String? imagePath,
   });
 
+  /// PATCH /conversations/{id}/messages/{msgId} — edit a text message (≤1h).
+  Future<ChatMessage> editMessage(int conversationId, int messageId, String body);
+
+  /// DELETE /conversations/{id}/messages/{msgId} — delete a message (≤24h).
+  Future<void> deleteMessage(int conversationId, int messageId);
+
+  /// POST /conversations/{id}/messages with a location/contact meta payload.
+  Future<ChatMessage> sendMeta({
+    required int conversationId,
+    required String type,
+    required Map<String, dynamic> meta,
+  });
+
+  /// POST /users/{id}/block — block a user.
+  Future<void> blockUser(int userId);
+
   /// Marks a direct/group conversation read (no-op concept for broadcasts).
   Future<void> markRead(int conversationId);
 
@@ -153,6 +169,40 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
     final res = await _client.post<Map<String, dynamic>>(path, data: data);
     return ApiEnvelope.object(res.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<ChatMessage> editMessage(
+      int conversationId, int messageId, String body) async {
+    final res = await _client.patch<Map<String, dynamic>>(
+      ApiEndpoints.conversationMessage(conversationId, messageId),
+      data: {'body': body},
+    );
+    return ApiEnvelope.object(res.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<void> deleteMessage(int conversationId, int messageId) async {
+    await _client.delete<dynamic>(
+        ApiEndpoints.conversationMessage(conversationId, messageId));
+  }
+
+  @override
+  Future<ChatMessage> sendMeta({
+    required int conversationId,
+    required String type,
+    required Map<String, dynamic> meta,
+  }) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.conversationMessages(conversationId),
+      data: {'type': type, 'meta': meta},
+    );
+    return ApiEnvelope.object(res.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<void> blockUser(int userId) async {
+    await _client.post<dynamic>(ApiEndpoints.userBlock(userId));
   }
 
   @override

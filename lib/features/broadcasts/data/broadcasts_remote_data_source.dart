@@ -9,6 +9,12 @@ abstract class BroadcastsRemoteDataSource {
 
   /// GET /broadcasts/{id} — a broadcast list with recipients.
   Future<BroadcastDetail> getDetail(int id);
+
+  /// PUT /broadcasts/{id} — rename and/or change recipients.
+  Future<BroadcastDetail> update(int id, {String? name, List<int>? userIds});
+
+  /// DELETE /broadcasts/{id} — delete a broadcast list.
+  Future<void> delete(int id);
 }
 
 class BroadcastsRemoteDataSourceImpl implements BroadcastsRemoteDataSource {
@@ -29,5 +35,22 @@ class BroadcastsRemoteDataSourceImpl implements BroadcastsRemoteDataSource {
   Future<BroadcastDetail> getDetail(int id) async {
     final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.broadcast(id));
     return ApiEnvelope.object(res.data, BroadcastDetail.fromJson);
+  }
+
+  @override
+  Future<BroadcastDetail> update(int id, {String? name, List<int>? userIds}) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (userIds != null) body['user_ids'] = userIds;
+    final res = await _client.put<Map<String, dynamic>>(
+      ApiEndpoints.broadcast(id),
+      data: body,
+    );
+    return ApiEnvelope.object(res.data, BroadcastDetail.fromJson);
+  }
+
+  @override
+  Future<void> delete(int id) async {
+    await _client.delete<dynamic>(ApiEndpoints.broadcast(id));
   }
 }

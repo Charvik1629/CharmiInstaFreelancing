@@ -23,6 +23,10 @@ class FeedRepositoryImpl with BaseRepository implements FeedRepository {
       guard(() => _remote.createLoad(post));
 
   @override
+  Future<Result<Load>> updateLoad(int id, NewPost post) =>
+      guard(() => _remote.updateLoad(id, post));
+
+  @override
   Future<Result<int?>> requestLoad(int id) => guard(() => _remote.requestLoad(id));
 
   @override
@@ -38,4 +42,7 @@ class FeedRepositoryImpl with BaseRepository implements FeedRepository {
 
   @override
   Future<Result<Load>> boostLoad(int id) => guard(() => _remote.boostLoad(id));
+
+  @override
+  Future<Result<Load>> markSold(int id) => guard(() => _remote.markSold(id));
 }

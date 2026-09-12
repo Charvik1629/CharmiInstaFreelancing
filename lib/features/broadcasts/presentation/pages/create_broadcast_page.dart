@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/models/user.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../wallet/domain/repositories/wallet_repository.dart';
+import '../../../wallet/presentation/widgets/overage_dialog.dart';
 import '../../domain/broadcast_detail.dart';
 import '../cubit/create_broadcast_cubit.dart';
 
@@ -27,6 +30,30 @@ class CreateBroadcastPage extends StatelessWidget {
 class _CreateBroadcastView extends StatelessWidget {
   const _CreateBroadcastView();
 
+  /// Broadcast list overage (design "User · Chat list overage"): the free-list
+  /// limit is reached, so offer to debit credits or subscribe.
+  Future<void> _showOverage(BuildContext context) async {
+    final wallet = (await sl<WalletRepository>().getWallet()).valueOrNull;
+    if (!context.mounted) return;
+    final cost = wallet?.broadcastCost ?? 15;
+    final balance = wallet?.creditBalance ?? 0;
+    final choice = await OverageDialog.show(
+      context,
+      cost: cost,
+      balance: balance,
+      title: balance >= cost ? 'Free list limit reached' : 'Broadcast list limit over',
+      message: balance >= cost
+          ? 'Creating another broadcast list will debit $cost credits from your wallet.'
+          : 'Your free broadcast lists are used up. Subscribe to keep creating.',
+    );
+    if (!context.mounted) return;
+    if (choice == OverageChoice.subscribe) {
+      context.push(AppRoutes.subscription);
+    } else if (choice == OverageChoice.debit) {
+      context.read<CreateBroadcastCubit>().submit();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<CreateBroadcastCubit, CreateBroadcastState>(
@@ -35,7 +62,12 @@ class _CreateBroadcastView extends StatelessWidget {
         if (state.status == CreateStatus.success) {
           context.pop<BroadcastDetail>(state.created);
         } else if (state.status == CreateStatus.failure) {
-          AppOverlays.snack(context, state.errorMessage ?? 'Could not create broadcast');
+          if (state.insufficientCredits) {
+            _showOverage(context);
+          } else {
+            AppOverlays.snack(
+                context, state.errorMessage ?? 'Could not create broadcast');
+          }
         }
       },
       child: Scaffold(

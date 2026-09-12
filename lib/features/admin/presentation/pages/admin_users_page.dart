@@ -300,9 +300,13 @@ class _AdjustCreditsDialogState extends State<_AdjustCreditsDialog> {
   }
 
   void _submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final n = int.tryParse(_amount.text.trim());
+    if (n == null || n < 1) {
+      AppOverlays.snack(context, 'Enter an amount of at least 1');
+      return;
+    }
     Navigator.of(context).pop(_Adjustment(
-      int.parse(_amount.text.trim()),
+      n,
       _direction,
       _note.text.trim().isEmpty ? null : _note.text.trim(),
     ));
@@ -310,50 +314,63 @@ class _AdjustCreditsDialogState extends State<_AdjustCreditsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Adjust credits · ${widget.userName}'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'credit', label: Text('Add')),
-                ButtonSegment(value: 'debit', label: Text('Remove')),
-              ],
-              selected: {_direction},
-              onSelectionChanged: (s) => setState(() => _direction = s.first),
-              showSelectedIcon: false,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextFormField(
-              controller: _amount,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Amount (credits)'),
-              validator: (_) {
-                final n = int.tryParse(_amount.text.trim());
-                if (n == null || n < 1) return 'Enter at least 1';
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: _note,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
-            ),
-          ],
+    return Dialog(
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg)),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Adjust credits',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text(widget.userName,
+                  style: TextStyle(color: context.nexveero.textSecondary)),
+              const SizedBox(height: AppSpacing.lg),
+              AppSegmented(
+                segments: const ['Add', 'Remove'],
+                selectedIndex: _direction == 'credit' ? 0 : 1,
+                onChanged: (i) =>
+                    setState(() => _direction = i == 0 ? 'credit' : 'debit'),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                controller: _amount,
+                label: 'Amount (credits)',
+                hint: '100',
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppTextField(
+                controller: _note,
+                label: 'Note (optional)',
+                hint: 'Reason for the adjustment',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Cancel',
+                      variant: AppButtonVariant.outline,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppButton(label: 'Apply', onPressed: _submit),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(onPressed: _submit, child: const Text('Apply')),
-      ],
     );
   }
 }

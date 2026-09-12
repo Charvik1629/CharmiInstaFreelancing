@@ -78,7 +78,7 @@ class _OffersViewState extends State<_OffersView> {
                 switch (state.status) {
                   case OffersStatus.loading:
                   case OffersStatus.initial:
-                    return const LoadingView();
+                    return const ListSkeleton();
                   case OffersStatus.error:
                     return ErrorView(
                       message: state.errorMessage ?? 'Could not load offers',

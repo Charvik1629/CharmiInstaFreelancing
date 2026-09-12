@@ -2,36 +2,38 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/models/load.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/widgets.dart';
-import '../../domain/entities/business_post.dart';
 
-/// Business feed post card (design "Business Feed", HTML 991–1128). Author row
-/// with a verified tick, media, caption, and a **Share / Report** action row —
-/// no Buy/Sell, Offer or Ask (those belong to the marketplace feed).
+/// Business feed card (design "Business Feed", HTML 991–1128). Backed by a
+/// [Load] of post_type=Business. Author row with a verified tick, media,
+/// caption, and a **Share / Report** action row. The owner's overflow (⋯) opens
+/// the Business options sheet (Edit / Boost) — wired by the page.
 class BusinessPostCard extends StatelessWidget {
   const BusinessPostCard({
     super.key,
-    required this.post,
+    required this.load,
     required this.onShare,
     required this.onReport,
+    this.onMore,
   });
 
-  final BusinessPost post;
+  final Load load;
   final VoidCallback onShare;
   final VoidCallback onReport;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
     final nex = context.nexveero;
     final texts = Theme.of(context).textTheme;
-    final meta = [
-      if (post.createdAt != null) post.createdAt!.timeAgo,
-      if ((post.location ?? '').isNotEmpty) post.location,
-    ].whereType<String>().join(' · ');
-    final image = MediaUrl.resolve(post.imageUrl);
+    final image = MediaUrl.resolve(load.mediaUrl);
+    final caption = [load.title, load.body ?? '']
+        .where((s) => s.isNotEmpty)
+        .join('  ');
 
     return Container(
       margin: const EdgeInsets.fromLTRB(
@@ -50,7 +52,10 @@ class BusinessPostCard extends StatelessWidget {
                 AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.sm),
             child: Row(
               children: [
-                AppAvatar(name: post.authorName, imageUrl: image == null ? null : MediaUrl.resolve(post.avatarUrl), size: 36),
+                AppAvatar(
+                    name: load.author?.name ?? '?',
+                    imageUrl: MediaUrl.resolve(load.author?.avatarUrl),
+                    size: 36),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
@@ -59,26 +64,29 @@ class BusinessPostCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(post.authorName,
+                            child: Text(load.author?.name ?? 'Business',
                                 style: texts.titleMedium,
                                 overflow: TextOverflow.ellipsis),
                           ),
-                          if (post.verified) ...[
-                            const SizedBox(width: 4),
-                            Icon(Icons.verified,
-                                size: 15,
-                                color: Theme.of(context).colorScheme.primary),
-                          ],
+                          const SizedBox(width: 4),
+                          Icon(Icons.verified,
+                              size: 15,
+                              color: Theme.of(context).colorScheme.primary),
                         ],
                       ),
-                      if (meta.isNotEmpty)
-                        Text(meta,
+                      if (load.createdAt != null)
+                        Text(load.createdAt!.timeAgo,
                             style: texts.bodySmall
                                 ?.copyWith(color: nex.textSecondary)),
                     ],
                   ),
                 ),
-                Icon(Icons.more_horiz, color: nex.iconInactive),
+                if (load.isBoosted) const _BoostedTag(),
+                IconButton(
+                  icon: const Icon(Icons.more_horiz),
+                  color: nex.iconInactive,
+                  onPressed: onMore,
+                ),
               ],
             ),
           ),
@@ -88,17 +96,17 @@ class BusinessPostCard extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: image,
                 fit: BoxFit.cover,
-                placeholder: (_, _) =>
-                    const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
-                errorWidget: (_, _, _) =>
-                    const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
+                placeholder: (_, _) => const ImagePlaceholder(
+                    role: PlaceholderRole.post, radius: 0),
+                errorWidget: (_, _, _) => const ImagePlaceholder(
+                    role: PlaceholderRole.post, radius: 0),
               ),
             ),
-          if ((post.caption ?? '').isNotEmpty)
+          if (caption.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
-              child: Text(post.caption!, style: texts.bodyMedium),
+              child: Text(caption, style: texts.bodyMedium),
             ),
           Padding(
             padding: const EdgeInsets.symmetric(
@@ -118,6 +126,28 @@ class BusinessPostCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BoostedTag extends StatelessWidget {
+  const _BoostedTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      decoration: BoxDecoration(
+        gradient: context.nexveero.primaryGradient,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.rocket_launch, size: 12, color: Colors.white),
+        SizedBox(width: 3),
+        Text('Boosted',
+            style: TextStyle(
+                color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 }

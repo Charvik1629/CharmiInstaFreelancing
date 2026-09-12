@@ -10,6 +10,7 @@ class CreateBroadcastState extends Equatable {
     this.searching = false,
     this.status = CreateStatus.idle,
     this.errorMessage,
+    this.insufficientCredits = false,
     this.created,
   });
 
@@ -19,6 +20,10 @@ class CreateBroadcastState extends Equatable {
   final bool searching;
   final CreateStatus status;
   final String? errorMessage;
+
+  /// True when the last submit failed with a 402 (free-list limit reached /
+  /// not enough credits) — the page shows the overage prompt.
+  final bool insufficientCredits;
   final BroadcastDetail? created;
 
   bool get isSubmitting => status == CreateStatus.submitting;
@@ -33,6 +38,7 @@ class CreateBroadcastState extends Equatable {
     CreateStatus? status,
     String? errorMessage,
     bool clearError = false,
+    bool insufficientCredits = false,
     BroadcastDetail? created,
   }) {
     return CreateBroadcastState(
@@ -42,11 +48,20 @@ class CreateBroadcastState extends Equatable {
       searching: searching ?? this.searching,
       status: status ?? this.status,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      insufficientCredits: insufficientCredits,
       created: created ?? this.created,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [name, results, selected, searching, status, errorMessage, created];
+  List<Object?> get props => [
+        name,
+        results,
+        selected,
+        searching,
+        status,
+        errorMessage,
+        insufficientCredits,
+        created,
+      ];
 }

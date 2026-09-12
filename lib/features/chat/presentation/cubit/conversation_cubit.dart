@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
+import '../../../../core/error/failure.dart';
+import '../../../../core/realtime/socket_service.dart';
 import '../../../../core/utils/result.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
@@ -12,13 +17,42 @@ part 'conversation_state.dart';
 /// window of messages, pages older ones on demand, and sends new ones.
 class ConversationCubit extends Cubit<ConversationState> {
   ConversationCubit(this._repository, this.conversation, {this.meId})
-      : super(const ConversationState());
+      : super(const ConversationState()) {
+    _listenRealtime();
+  }
 
   final ChatRepository _repository;
   final Conversation conversation;
   final int? meId;
 
+  StreamSubscription<RealtimeMessage>? _socketSub;
+
   bool get canSend => conversation.canChat;
+
+  /// Subscribes to live `message:new` events for this thread (falls back to the
+  /// existing polling when the socket isn't connected).
+  void _listenRealtime() {
+    if (!sl.isRegistered<SocketService>()) return;
+    final socket = sl<SocketService>();
+    socket.joinConversation(conversation.id);
+    _socketSub = socket.messages
+        .where((m) => m.conversationId == conversation.id)
+        .listen((m) {
+      // Skip messages we already have (e.g. our own, appended on send).
+      if (state.messages.any((x) => x.id == m.message.id)) return;
+      emit(state.copyWith(
+        messages: [...state.messages, m.message],
+        status: ThreadStatus.loaded,
+      ));
+      _markRead();
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _socketSub?.cancel();
+    return super.close();
+  }
 
   Future<void> load() async {
     emit(state.copyWith(status: ThreadStatus.loading));
@@ -95,6 +129,70 @@ class ConversationCubit extends Cubit<ConversationState> {
       case Err(failure: final f):
         emit(state.copyWith(isSending: false, errorMessage: f.message));
     }
+  }
+
+  /// Sends a location message (lat/lng + label).
+  Future<Result<ChatMessage>> sendLocation(
+      double lat, double lng, String label) async {
+    final result = await _repository.sendMeta(
+      conversationId: conversation.id,
+      type: 'location',
+      meta: {'lat': lat, 'lng': lng, 'label': label},
+    );
+    if (result case Success(value: final m)) {
+      emit(state.copyWith(
+          messages: [...state.messages, m], status: ThreadStatus.loaded));
+    }
+    return result;
+  }
+
+  /// Shares a contact (name + phone) as a message.
+  Future<Result<ChatMessage>> sendContact(String name, String phone) async {
+    final result = await _repository.sendMeta(
+      conversationId: conversation.id,
+      type: 'contact',
+      meta: {'name': name, 'phone': phone},
+    );
+    if (result case Success(value: final m)) {
+      emit(state.copyWith(
+          messages: [...state.messages, m], status: ThreadStatus.loaded));
+    }
+    return result;
+  }
+
+  /// Blocks the other user in a direct chat.
+  Future<Result<void>> blockPeer() async {
+    final id = conversation.peerId;
+    if (id == null) {
+      return const Err(ValidationFailure('No user to block'));
+    }
+    return _repository.blockUser(id);
+  }
+
+  /// Edits a text message in place.
+  Future<Result<ChatMessage>> editMessage(int messageId, String body) async {
+    final result =
+        await _repository.editMessage(conversation.id, messageId, body);
+    if (result case Success(value: final updated)) {
+      emit(state.copyWith(
+        messages: [
+          for (final m in state.messages)
+            if (m.id == messageId) updated else m,
+        ],
+      ));
+    }
+    return result;
+  }
+
+  /// Deletes a message and removes it from the thread.
+  Future<Result<void>> deleteMessage(int messageId) async {
+    final result = await _repository.deleteMessage(conversation.id, messageId);
+    if (result.isSuccess) {
+      emit(state.copyWith(
+        messages: state.messages.where((m) => m.id != messageId).toList(),
+      ));
+    }
+    return result;
   }
 
   void _markRead() {

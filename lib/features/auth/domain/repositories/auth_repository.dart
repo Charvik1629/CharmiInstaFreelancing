@@ -31,6 +31,10 @@ abstract class AuthRepository {
   /// Revokes the token server-side (best effort) and clears local session.
   Future<void> logout();
 
+  /// DELETE /account — permanently deletes the account (requires the password),
+  /// then clears the local session.
+  Future<Result<void>> deleteAccount(String password);
+
   /// Persists token + user after a successful auth.
   Future<void> persistSession(AuthSession session);
 

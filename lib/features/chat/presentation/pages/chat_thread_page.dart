@@ -17,6 +17,8 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/repositories/chat_repository.dart';
+import '../../../orders/domain/entities/order.dart';
+import '../../../orders/presentation/widgets/create_order_sheet.dart';
 import '../cubit/conversation_cubit.dart';
 
 /// A single chat thread (direct, group or broadcast). Broadcasts are one-to-many
@@ -116,9 +118,253 @@ class _ThreadViewState extends State<_ThreadView> {
               _pickDocument();
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.location_on_outlined),
+            title: const Text('Location'),
+            onTap: () {
+              Navigator.of(sheetCtx).pop();
+              _shareLocation();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Contact'),
+            onTap: () {
+              Navigator.of(sheetCtx).pop();
+              _shareContact();
+            },
+          ),
+          if (!widget.conversation.isBroadcast)
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: const Text('Send order'),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                _createOrder();
+              },
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _shareLocation() async {
+    final label = TextEditingController();
+    final lat = TextEditingController();
+    final lng = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Share location', style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(controller: label, label: 'Place', hint: 'e.g. Warehouse'),
+              const SizedBox(height: AppSpacing.md),
+              Row(children: [
+                Expanded(
+                    child: AppTextField(
+                        controller: lat,
+                        label: 'Lat',
+                        keyboardType: TextInputType.number)),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                    child: AppTextField(
+                        controller: lng,
+                        label: 'Lng',
+                        keyboardType: TextInputType.number)),
+              ]),
+              const SizedBox(height: AppSpacing.xl),
+              Row(children: [
+                Expanded(
+                  child: AppButton(
+                    label: 'Cancel',
+                    variant: AppButtonVariant.outline,
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: AppButton(
+                    label: 'Send',
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final result = await context.read<ConversationCubit>().sendLocation(
+          double.tryParse(lat.text.trim()) ?? 0,
+          double.tryParse(lng.text.trim()) ?? 0,
+          label.text.trim(),
+        );
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(context, result.failureOrNull?.message ?? 'Could not share location');
+    }
+  }
+
+  Future<void> _shareContact() async {
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Share contact', style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(controller: name, label: 'Name'),
+              const SizedBox(height: AppSpacing.md),
+              AppTextField(
+                  controller: phone,
+                  label: 'Phone',
+                  keyboardType: TextInputType.phone),
+              const SizedBox(height: AppSpacing.xl),
+              Row(children: [
+                Expanded(
+                  child: AppButton(
+                    label: 'Cancel',
+                    variant: AppButtonVariant.outline,
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: AppButton(
+                    label: 'Send',
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final result = await context
+        .read<ConversationCubit>()
+        .sendContact(name.text.trim(), phone.text.trim());
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(context, result.failureOrNull?.message ?? 'Could not share contact');
+    }
+  }
+
+  /// Long-press actions on the user's own message: edit (text) / delete.
+  /// The server enforces the ≤1h edit and ≤24h delete windows.
+  Future<void> _messageActions(ChatMessage msg) async {
+    final action = await AppOverlays.sheet<String>(
+      context,
+      builder: (sheetCtx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if ((msg.body ?? '').isNotEmpty && !msg.hasImage && !msg.hasFileAttachment)
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit'),
+              onTap: () => Navigator.of(sheetCtx).pop('edit'),
+            ),
+          ListTile(
+            leading: Icon(Icons.delete_outline,
+                color: Theme.of(sheetCtx).colorScheme.error),
+            title: Text('Delete',
+                style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error)),
+            onTap: () => Navigator.of(sheetCtx).pop('delete'),
+          ),
+        ],
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'edit') {
+      await _editMessage(msg);
+    } else if (action == 'delete') {
+      final result = await context.read<ConversationCubit>().deleteMessage(msg.id);
+      if (mounted && !result.isSuccess) {
+        AppOverlays.snack(context,
+            result.failureOrNull?.message ?? 'Could not delete message');
+      }
+    }
+  }
+
+  Future<void> _editMessage(ChatMessage msg) async {
+    final controller = TextEditingController(text: msg.body);
+    final body = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Edit message',
+                  style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(
+                controller: controller,
+                hint: 'Message',
+                maxLines: 4,
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Cancel',
+                      variant: AppButtonVariant.outline,
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Save',
+                      onPressed: () =>
+                          Navigator.pop(ctx, controller.text.trim()),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (body == null || body.isEmpty || !mounted) return;
+    final result = await context.read<ConversationCubit>().editMessage(msg.id, body);
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(
+          context, result.failureOrNull?.message ?? 'Could not edit message');
+    }
+  }
+
+  Future<void> _createOrder() async {
+    final order = await CreateOrderSheet.show(context,
+        conversationId: widget.conversation.id);
+    if (order == null || !mounted) return;
+    // Refresh the thread so the order card (returned by the backend as an
+    // order-type message) shows up; also confirm inline.
+    await context.read<ConversationCubit>().load();
+    if (!mounted) return;
+    AppOverlays.snack(context, 'Order sent · ${order.amountCredits} credits');
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -183,7 +429,7 @@ class _ThreadViewState extends State<_ThreadView> {
         title: GestureDetector(
           onTap: c.isBroadcast
               ? () => context.push(AppRoutes.broadcastDetail, extra: c.id)
-              : null,
+              : () => context.push(AppRoutes.contactInfo, extra: c),
           child: Row(
           children: [
             AppAvatar(name: c.title, imageUrl: MediaUrl.resolve(c.avatarUrl), size: 36),
@@ -248,10 +494,17 @@ class _ThreadViewState extends State<_ThreadView> {
                         }
                         final index = state.isLoadingMore ? i - 1 : i;
                         final msg = state.messages[index];
-                        return _Bubble(
-                          message: msg,
-                          mine: msg.isMine(widget.meId),
-                          showSender: widget.conversation.type == ConversationType.group,
+                        final mine = msg.isMine(widget.meId);
+                        return GestureDetector(
+                          onLongPress: (mine && !msg.isOrder)
+                              ? () => _messageActions(msg)
+                              : null,
+                          child: _Bubble(
+                            message: msg,
+                            mine: mine,
+                            showSender:
+                                widget.conversation.type == ConversationType.group,
+                          ),
                         );
                       },
                     );
@@ -281,6 +534,10 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Order messages render as a distinct order card (design "Chat · Order cards").
+    if (message.isOrder) {
+      return _OrderCard(order: message.order!);
+    }
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(16),
       topRight: const Radius.circular(16),
@@ -337,6 +594,107 @@ class _Bubble extends StatelessWidget {
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: bubble,
+    );
+  }
+}
+
+/// Order card rendered inline in the thread (design "Chat · Order cards").
+class _OrderCard extends StatelessWidget {
+  const _OrderCard({required this.order});
+  final MessageOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final texts = Theme.of(context).textTheme;
+    final badge = switch (order.status) {
+      'paid' || 'completed' => 'PAID',
+      'in_progress' => 'IN PROGRESS',
+      'cancelled' => 'CANCELLED',
+      _ => 'AWAITING',
+    };
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: nex.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(gradient: nex.primaryGradient),
+            child: Row(
+              children: [
+                const Icon(Icons.receipt_long, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Order request',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
+                  child: Text(badge,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(order.title ?? 'Order', style: texts.titleMedium),
+                const SizedBox(height: 8),
+                Text('${order.amountCredits} credits',
+                    style: texts.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Details',
+                        variant: AppButtonVariant.outline,
+                        onPressed: () => context.push(
+                          AppRoutes.orderDetail,
+                          extra: AppOrder(
+                            id: order.id,
+                            number: order.number,
+                            status: order.status,
+                            amountCredits: order.amountCredits,
+                            title: order.title,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Pay',
+                        onPressed: () => AppOverlays.snack(context,
+                            'Order payment is settled by the backend once its pay endpoint is live.'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

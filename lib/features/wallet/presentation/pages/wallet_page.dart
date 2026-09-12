@@ -6,8 +6,15 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../payment/data/iap_service.dart';
+import '../../../payment/data/razorpay_checkout.dart';
+import '../../../payment/presentation/widgets/payment_dialogs.dart';
+import '../../../payment/presentation/widgets/payment_method_sheet.dart';
 import '../../domain/entities/wallet.dart';
+import '../../domain/repositories/wallet_repository.dart';
 import '../cubit/wallet_cubit.dart';
 
 /// Wallet & credits (design "Wallet"). Balance, what actions cost, buy-credit
@@ -203,10 +210,117 @@ class _PackageCard extends StatelessWidget {
     );
   }
 
-  void _buy(BuildContext context) {
-    // Real purchase needs the Razorpay checkout SDK + live keys (the mock/dev
-    // wallet reports razorpay_configured=false). Gated until that's wired.
-    AppOverlays.snack(context,
-        'Card payments arrive once Razorpay checkout is connected (see MISSING_APIS).');
+  /// Lets the buyer pick Razorpay (card/UPI) or store in-app purchase, then
+  /// runs the chosen flow.
+  Future<void> _buy(BuildContext context) async {
+    final method = await PaymentMethodSheet.show(context);
+    if (method == null || !context.mounted) return;
+    switch (method) {
+      case PaymentMethod.razorpay:
+        await _buyRazorpay(context);
+      case PaymentMethod.inAppPurchase:
+        await _buyIap(context);
+    }
+  }
+
+  /// Full Razorpay flow: checkout → open Razorpay → verify → refresh.
+  /// Cancellations/failures are reported to `/wallet/payments/{id}/outcome`.
+  Future<void> _buyRazorpay(BuildContext context) async {
+    final repo = sl<WalletRepository>();
+    final user = sl<AuthCubit>().state.user;
+
+    final checkoutRes = await repo.checkout(package.id);
+    if (!context.mounted) return;
+    if (checkoutRes case Err(failure: final f)) {
+      await PaymentDialogs.showResult(context, PaymentResult.failed,
+          message: f.message);
+      return;
+    }
+    final order = (checkoutRes as Success).value;
+
+    final result = await RazorpayCheckout().open(
+      keyId: order.razorpayKeyId,
+      orderId: order.razorpayOrderId,
+      amountPaise: order.amountPaise,
+      description: '${order.credits} credits',
+      name: user?.name,
+      email: user?.email,
+      contact: user?.phone,
+    );
+    if (!context.mounted) return;
+
+    switch (result) {
+      case RazorpaySuccess(:final paymentId, :final orderId, :final signature):
+        final verifyRes = await repo.verify(
+          paymentId: order.paymentId,
+          razorpayOrderId: orderId,
+          razorpayPaymentId: paymentId,
+          razorpaySignature: signature,
+        );
+        if (!context.mounted) return;
+        if (verifyRes.isSuccess) {
+          await context.read<WalletCubit>().refresh();
+          if (context.mounted) {
+            await PaymentDialogs.showResult(context, PaymentResult.success,
+                message: '${order.credits} credits added to your wallet.');
+          }
+        } else {
+          await PaymentDialogs.showResult(context, PaymentResult.pending,
+              message: verifyRes.failureOrNull?.message ??
+                  'We\'ll confirm your payment shortly.');
+        }
+      case RazorpayFailed(:final cancelled, :final message):
+        await repo.reportOutcome(
+            paymentId: order.paymentId,
+            status: cancelled ? 'cancelled' : 'failed');
+        if (!context.mounted) return;
+        if (!cancelled) {
+          await PaymentDialogs.showResult(context, PaymentResult.failed,
+              message: message);
+        }
+    }
+  }
+
+  /// Apple/Google in-app purchase flow: buy the store product → send the receipt
+  /// to the backend (`/wallet/iap/verify`) → refresh.
+  Future<void> _buyIap(BuildContext context) async {
+    final result = await IapService().buy(package.id);
+    if (!context.mounted) return;
+    switch (result) {
+      case IapUnavailable():
+        await PaymentDialogs.showResult(context, PaymentResult.failed,
+            message: 'In-app purchases aren\'t available on this device.');
+      case IapFailed(:final cancelled, :final message):
+        if (!cancelled) {
+          await PaymentDialogs.showResult(context, PaymentResult.failed,
+              message: message);
+        }
+      case IapSuccess(
+          :final verificationData,
+          :final source,
+          :final productId,
+          :final transactionId
+        ):
+        final platform = source == 'app_store' ? 'ios' : 'android';
+        final res = await sl<WalletRepository>().verifyIap(
+          creditPackageId: package.id,
+          platform: platform,
+          receipt: verificationData,
+          productId: productId,
+          transactionId: transactionId,
+        );
+        if (!context.mounted) return;
+        if (res.isSuccess) {
+          await context.read<WalletCubit>().refresh();
+          if (context.mounted) {
+            await PaymentDialogs.showResult(context, PaymentResult.success,
+                message: '${package.credits} credits added to your wallet.');
+          }
+        } else {
+          await PaymentDialogs.showResult(context, PaymentResult.pending,
+              message: res.failureOrNull?.message ??
+                  'We\'ll confirm your purchase shortly.');
+        }
+    }
   }
 }

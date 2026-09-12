@@ -16,6 +16,7 @@ class CreatePostState extends Equatable {
     this.submitStatus = SubmitStatus.idle,
     this.errorMessage,
     this.fieldErrors = const {},
+    this.editing = false,
     this.created,
   });
 
@@ -37,6 +38,9 @@ class CreatePostState extends Equatable {
   final SubmitStatus submitStatus;
   final String? errorMessage;
   final Map<String, String> fieldErrors;
+
+  /// True when the composer is editing an existing post (vs creating new).
+  final bool editing;
 
   /// The created post, available once [submitStatus] is success.
   final Load? created;
@@ -65,6 +69,7 @@ class CreatePostState extends Equatable {
     String? errorMessage,
     bool clearError = false,
     Map<String, String>? fieldErrors,
+    bool? editing,
     Load? created,
   }) {
     return CreatePostState(
@@ -78,6 +83,7 @@ class CreatePostState extends Equatable {
       submitStatus: submitStatus ?? this.submitStatus,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       fieldErrors: clearError ? const {} : (fieldErrors ?? this.fieldErrors),
+      editing: editing ?? this.editing,
       created: created ?? this.created,
     );
   }
@@ -94,6 +100,7 @@ class CreatePostState extends Equatable {
         submitStatus,
         errorMessage,
         fieldErrors,
+        editing,
         created,
       ];
 }

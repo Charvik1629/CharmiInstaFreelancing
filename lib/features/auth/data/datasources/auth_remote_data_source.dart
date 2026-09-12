@@ -27,6 +27,10 @@ abstract class AuthRemoteDataSource {
   });
   Future<User> me();
   Future<void> logout();
+
+  /// DELETE /account — permanently deletes the current account.
+  Future<void> deleteAccount(String password);
+
   Future<void> sendOtp(String identifier);
   Future<void> verifyOtp({required String identifier, required String code});
   Future<void> forgotPassword(String email);
@@ -103,6 +107,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<User> me() async {
     final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.me);
     return ApiEnvelope.object(res.data, User.fromJson);
+  }
+
+  @override
+  Future<void> deleteAccount(String password) async {
+    await _client.delete<dynamic>(
+      ApiEndpoints.account,
+      data: {'password': password, 'confirmation': 'DELETE'},
+    );
   }
 
   @override

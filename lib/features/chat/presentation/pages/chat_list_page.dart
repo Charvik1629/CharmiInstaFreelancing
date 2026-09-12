@@ -64,7 +64,7 @@ class _ChatListView extends StatelessWidget {
                 switch (state.status) {
                   case ChatListStatus.loading:
                   case ChatListStatus.initial:
-                    return const LoadingView();
+                    return const ListSkeleton();
                   case ChatListStatus.error:
                     return ErrorView(
                       message: state.errorMessage ?? 'Could not load chats',

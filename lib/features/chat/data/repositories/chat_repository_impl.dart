@@ -43,6 +43,28 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
           id: id, type: type, body: body, imagePath: imagePath));
 
   @override
+  Future<Result<ChatMessage>> editMessage(
+          int conversationId, int messageId, String body) =>
+      guard(() => _remote.editMessage(conversationId, messageId, body));
+
+  @override
+  Future<Result<void>> deleteMessage(int conversationId, int messageId) =>
+      guard(() => _remote.deleteMessage(conversationId, messageId));
+
+  @override
+  Future<Result<ChatMessage>> sendMeta({
+    required int conversationId,
+    required String type,
+    required Map<String, dynamic> meta,
+  }) =>
+      guard(() =>
+          _remote.sendMeta(conversationId: conversationId, type: type, meta: meta));
+
+  @override
+  Future<Result<void>> blockUser(int userId) =>
+      guard(() => _remote.blockUser(userId));
+
+  @override
   Future<Result<void>> markRead(int conversationId) =>
       guard(() => _remote.markRead(conversationId));
 

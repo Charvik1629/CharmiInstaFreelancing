@@ -53,10 +53,12 @@ class AppConfig {
     );
   }
 
-  // ---- Placeholders. Replace [_baseUrl] values when the real URL is known. ----
-  static const String _devBaseUrl = 'https://REPLACE_ME.dev.nexveero.app';
-  static const String _stagingBaseUrl = 'https://REPLACE_ME.staging.nexveero.app';
-  static const String _prodBaseUrl = 'https://REPLACE_ME.nexveero.app';
+  // Live backend. Base URL is `https://nexveero.com`; the API root is
+  // `https://nexveero.com/api/v1` (apiPrefix below). A `--dart-define=BASE_URL`
+  // still overrides this (e.g. to point at a local mock).
+  static const String _devBaseUrl = 'https://nexveero.com';
+  static const String _stagingBaseUrl = 'https://nexveero.com';
+  static const String _prodBaseUrl = 'https://nexveero.com';
 
   static const AppConfig dev = AppConfig._(
     environment: AppEnvironment.dev,

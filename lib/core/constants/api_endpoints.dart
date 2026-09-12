@@ -10,6 +10,7 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
   static const String me = '/auth/me';
+  static const String account = '/account';
   // Pending backend (see MISSING_APIS.md) — wired so buttons work once added.
   static const String otpSend = '/auth/otp/send';
   static const String otpVerify = '/auth/otp/verify';
@@ -21,6 +22,7 @@ class ApiEndpoints {
   static const String profile = '/profile';
   static const String users = '/users';
   static String user(Object id) => '/users/$id';
+  static String userBlock(Object id) => '/users/$id/block';
 
   // Post types
   static const String postTypes = '/post-types';
@@ -33,11 +35,15 @@ class ApiEndpoints {
   static String loadOffers(Object id) => '/loads/$id/offers';
   static String loadReports(Object id) => '/loads/$id/reports';
   static String loadBoost(Object id) => '/loads/$id/boost';
+  static String loadSold(Object id) => '/loads/$id/sold';
 
-  // Business feed (business posts + interspersed Google ads). Backend pending
-  // (see BACKEND_REQUIREMENTS) — the cubit gates gracefully on 404.
-  static const String businessPosts = '/business-posts';
-  static String businessPostReport(Object id) => '/business-posts/$id/reports';
+  // Business directory (design "Business profile" + search). Business FEED is
+  // just /loads with post_type=Business (post-types are Buy/Sell/Business).
+  static const String businesses = '/businesses';
+  static String businessBoost(Object id) => '/businesses/$id/boost';
+
+  // Orders (create only in the current docs; settled in credits).
+  static const String orders = '/orders';
 
   // Offers
   static const String offers = '/offers';
@@ -56,6 +62,8 @@ class ApiEndpoints {
       '/conversations/$conversationId/labels/$labelId';
   static String conversation(Object id) => '/conversations/$id';
   static String conversationMessages(Object id) => '/conversations/$id/messages';
+  static String conversationMessage(Object id, Object msgId) =>
+      '/conversations/$id/messages/$msgId';
   static String conversationRead(Object id) => '/conversations/$id/read';
 
   // Groups
@@ -82,6 +90,12 @@ class ApiEndpoints {
   static const String walletCheckout = '/wallet/checkout';
   static const String walletVerify = '/wallet/verify';
   static const String walletDemoTopup = '/wallet/demo-topup';
+  static const String walletPayments = '/wallet/payments';
+  static String walletPaymentOutcome(Object id) =>
+      '/wallet/payments/$id/outcome';
+  // Apple/Google IAP receipt verification. NOTE: not in the current API docs —
+  // needs a backend endpoint to validate the store receipt and credit credits.
+  static const String walletIapVerify = '/wallet/iap/verify';
 
   // Admin — wallet (packages, settings, manual adjust)
   static const String adminWalletPackages = '/admin/wallet/packages';

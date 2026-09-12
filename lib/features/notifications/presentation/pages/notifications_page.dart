@@ -50,7 +50,7 @@ class _NotificationsView extends StatelessWidget {
           switch (state.status) {
             case NotifStatus.initial:
             case NotifStatus.loading:
-              return const LoadingView();
+              return const ListSkeleton();
             case NotifStatus.error:
               return ErrorView(
                 message: state.errorMessage ?? 'Could not load notifications',

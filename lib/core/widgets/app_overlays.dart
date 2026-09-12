@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../extensions/build_context_extensions.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
+import 'app_button.dart';
+import 'app_text_field.dart';
 
 /// Overlay helpers so dialogs/sheets/snackbars look consistent app-wide.
 class AppOverlays {
   AppOverlays._();
 
-  /// Confirmation dialog (design: "Leave group?"). Returns true on confirm.
+  /// Confirmation dialog styled to the design (rounded card, optional tinted
+  /// icon, Cancel + Confirm buttons). Returns true on confirm. Destructive
+  /// confirms use the error colour for the icon + primary button.
   static Future<bool> confirm(
     BuildContext context, {
     required String title,
@@ -16,28 +19,128 @@ class AppOverlays {
     String confirmLabel = 'Confirm',
     String cancelLabel = 'Cancel',
     bool destructive = false,
+    IconData? icon,
   }) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title, style: ctx.theme.textTheme.titleLarge),
-        content: message == null ? null : Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(cancelLabel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: destructive ? ctx.theme.colorScheme.error : null,
+      builder: (ctx) {
+        final nex = ctx.nexveero;
+        final scheme = Theme.of(ctx).colorScheme;
+        final accent = destructive ? scheme.error : scheme.primary;
+        return Dialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg)),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null || destructive)
+                  Container(
+                    width: 48,
+                    height: 48,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: Icon(
+                        icon ?? (destructive ? Icons.warning_amber_rounded : Icons.help_outline),
+                        color: accent,
+                        size: 26),
+                  ),
+                Text(title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(ctx).textTheme.titleLarge),
+                if (message != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: nex.textSecondary, height: 1.45)),
+                ],
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: cancelLabel,
+                        variant: AppButtonVariant.outline,
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: destructive
+                          ? _DangerButton(
+                              label: confirmLabel,
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                            )
+                          : AppButton(
+                              label: confirmLabel,
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            child: Text(confirmLabel),
           ),
-        ],
-      ),
+        );
+      },
     );
     return result ?? false;
+  }
+
+  /// Styled single-field input dialog (Aurora Bloom). Returns the entered text,
+  /// or null if cancelled.
+  static Future<String?> prompt(
+    BuildContext context, {
+    required String title,
+    String? hint,
+    String? initialValue,
+    int maxLines = 1,
+    String confirmLabel = 'Save',
+  }) {
+    final ctrl = TextEditingController(text: initialValue);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: AppSpacing.lg),
+              AppTextField(controller: ctrl, hint: hint, maxLines: maxLines),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Cancel',
+                      variant: AppButtonVariant.outline,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppButton(
+                      label: confirmLabel,
+                      onPressed: () =>
+                          Navigator.of(ctx).pop(ctrl.text.trim()),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Modal bottom sheet with a drag handle and a title (design: Boost, menus).
@@ -89,5 +192,35 @@ class AppOverlays {
               : null,
         ),
       );
+  }
+}
+
+/// Solid error-coloured button for destructive confirms.
+class _DangerButton extends StatelessWidget {
+  const _DangerButton({required this.label, required this.onPressed});
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: Theme.of(context).colorScheme.error,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+        ),
+        child: Text(label,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: Colors.white)),
+      ),
+    );
   }
 }

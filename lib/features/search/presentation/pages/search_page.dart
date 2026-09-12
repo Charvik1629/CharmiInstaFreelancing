@@ -64,7 +64,6 @@ class _SearchViewState extends State<_SearchView> {
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    autofocus: true,
                     textInputAction: TextInputAction.search,
                     onChanged: (v) => context.read<SearchCubit>().onQueryChanged(v),
                     decoration: const InputDecoration(
@@ -272,7 +271,11 @@ class _UserRow extends StatelessWidget {
 
     String? pin;
     if (pinReq.valueOrNull == true) {
-      pin = await _askPin(context, user.name);
+      // Full-screen "Enter PIN to chat" (design HTML 2933).
+      pin = await context.push<String>(
+        AppRoutes.enterPin,
+        extra: {'name': user.name, 'avatar': user.avatarUrl},
+      );
       if (pin == null) return; // cancelled
     }
 
@@ -284,44 +287,5 @@ class _UserRow extends StatelessWidget {
       case Err(failure: final f):
         AppOverlays.snack(context, f.message);
     }
-  }
-
-  Future<String?> _askPin(BuildContext context, String name) {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enter chat PIN'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$name protects new chats with a PIN. Enter their 4-digit PIN '
-                'to start the conversation.'),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              obscureText: true,
-              decoration: const InputDecoration(counterText: '', hintText: '••••'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final v = ctrl.text.trim();
-              if (v.length == 4) Navigator.of(ctx).pop(v);
-            },
-            child: const Text('Start chat'),
-          ),
-        ],
-      ),
-    );
   }
 }

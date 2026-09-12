@@ -111,6 +111,14 @@ class FeedCubit extends Cubit<FeedState> {
     return result;
   }
 
+  /// Marks an owned post as sold. On success replaces the card with the updated
+  /// (closed) load in place.
+  Future<Result<Load>> markSold(Load load) async {
+    final result = await _repository.markSold(load.id);
+    if (result case Success(value: final updated)) _replace(updated);
+    return result;
+  }
+
   /// Deletes an owned post and removes it from the list on success.
   Future<Result<void>> delete(Load load) async {
     final result = await _repository.deleteLoad(load.id);

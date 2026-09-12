@@ -24,6 +24,23 @@ abstract class ChatRepository {
     String? imagePath,
   });
 
+  /// Edit a text message (server enforces the ≤1h window).
+  Future<Result<ChatMessage>> editMessage(
+      int conversationId, int messageId, String body);
+
+  /// Delete a message (server enforces the ≤24h window).
+  Future<Result<void>> deleteMessage(int conversationId, int messageId);
+
+  /// Send a location or contact message.
+  Future<Result<ChatMessage>> sendMeta({
+    required int conversationId,
+    required String type,
+    required Map<String, dynamic> meta,
+  });
+
+  /// Block a user.
+  Future<Result<void>> blockUser(int userId);
+
   Future<Result<void>> markRead(int conversationId);
   Future<Result<UnreadCounts>> getUnreadCounts();
   Future<Result<bool>> chatPinRequired(int userId);

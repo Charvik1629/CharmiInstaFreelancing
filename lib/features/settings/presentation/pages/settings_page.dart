@@ -16,6 +16,8 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthCubit>().state.user;
+    final isAdmin = user?.isAdmin ?? false;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -45,6 +47,36 @@ class SettingsPage extends StatelessWidget {
             title: 'Find friends',
             onTap: () => context.push(AppRoutes.contactSync),
           ),
+          // Credit balance (design "Settings · Credit" card) → wallet/buy credits.
+          _CreditRow(balance: user?.creditBalance ?? 0),
+          if (isAdmin) ...[
+            const _SectionLabel('Admin'),
+            _NavTile(
+              icon: Icons.payments_outlined,
+              title: 'Post & boost pricing',
+              onTap: () => context.push(AppRoutes.adminPricing),
+            ),
+            _NavTile(
+              icon: Icons.inventory_2_outlined,
+              title: 'Packages',
+              onTap: () => context.push(AppRoutes.adminPackages),
+            ),
+            _NavTile(
+              icon: Icons.flag_outlined,
+              title: 'Reported posts',
+              onTap: () => context.push(AppRoutes.adminReports),
+            ),
+            _NavTile(
+              icon: Icons.campaign_outlined,
+              title: 'Broadcast limits',
+              onTap: () => context.push(AppRoutes.adminBroadcastLimits),
+            ),
+            _NavTile(
+              icon: Icons.groups_2_outlined,
+              title: 'Broadcast groups',
+              onTap: () => context.push(AppRoutes.adminBroadcastGroups),
+            ),
+          ],
           const _SectionLabel('Support'),
           _NavTile(
             icon: Icons.help_outline,
@@ -129,6 +161,70 @@ class _PushToggleState extends State<_PushToggle> {
   }
 }
 
+/// Highlighted Credit balance card (design "Settings · Credit"): gradient toll
+/// tile + balance, tapping opens the wallet / buy-credits screen.
+class _CreditRow extends StatelessWidget {
+  const _CreditRow({required this.balance});
+  final int balance;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+      child: InkWell(
+        onTap: () => context.push(AppRoutes.wallet),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: nex.primaryGradient,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: const Icon(Icons.toll, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Credit', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Your balance',
+                        style: TextStyle(color: nex.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('$balance',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.primary)),
+                  Text('credits',
+                      style: TextStyle(color: nex.textSecondary, fontSize: 10)),
+                ],
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.chevron_right, size: 20, color: nex.iconInactive),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NavTile extends StatelessWidget {
   const _NavTile({
     required this.icon,
@@ -181,8 +277,7 @@ class _DangerZone extends StatelessWidget {
           leading: Icon(Icons.delete_outline, color: error),
           title: Text('Delete account', style: TextStyle(color: error)),
           subtitle: const Text('Permanently remove your account and data'),
-          onTap: () => AppOverlays.snack(
-              context, 'Account deletion needs a backend endpoint (see MISSING_APIS.md).'),
+          onTap: () => context.push(AppRoutes.deleteAccount),
         ),
       ],
     );

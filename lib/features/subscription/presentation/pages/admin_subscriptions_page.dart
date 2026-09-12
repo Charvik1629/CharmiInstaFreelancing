@@ -143,29 +143,12 @@ class _RequestCard extends StatelessWidget {
   }
 
   Future<String?> _askNote(BuildContext context) {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject request'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Reason (optional, shown to user)',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
+    return AppOverlays.prompt(
+      context,
+      title: 'Reject request',
+      hint: 'Reason (optional, shown to user)',
+      maxLines: 3,
+      confirmLabel: 'Reject',
     );
   }
 

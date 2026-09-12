@@ -20,4 +20,7 @@ class UnreadCubit extends Cubit<UnreadCounts> {
   /// Clears the badge locally (e.g. after opening the inbox) until the next
   /// server refresh.
   void clearInbox() => emit(UnreadCounts(offers: state.offers));
+
+  /// Applies counts pushed live over the socket (`unread:update`).
+  void setCounts(UnreadCounts counts) => emit(counts);
 }

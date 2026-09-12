@@ -2,6 +2,7 @@ import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_response.dart';
+import '../../domain/entities/checkout_order.dart';
 import '../../domain/entities/wallet.dart';
 import '../../domain/entities/wallet_transaction.dart';
 
@@ -18,6 +19,31 @@ abstract class WalletRemoteDataSource {
   /// POST /wallet/demo-topup — adds demo credits (dev/demo builds). Returns the
   /// new credit balance.
   Future<int> demoTopup();
+
+  /// POST /wallet/checkout — create a Razorpay order for a credit package.
+  Future<CheckoutOrder> checkout(int creditPackageId);
+
+  /// POST /wallet/verify — confirm the Razorpay payment and credit the wallet.
+  /// Returns the new credit balance.
+  Future<int> verify({
+    required int paymentId,
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+  });
+
+  /// POST /wallet/payments/{id}/outcome — report a client-side cancel/failure.
+  Future<void> reportOutcome({required int paymentId, required String status});
+
+  /// POST /wallet/iap/verify — validate an Apple/Google store receipt and credit
+  /// the wallet. Returns the new credit balance. (Backend endpoint pending.)
+  Future<int> verifyIap({
+    required int creditPackageId,
+    required String platform,
+    required String receipt,
+    String? productId,
+    String? transactionId,
+  });
 }
 
 class WalletRemoteDataSourceImpl implements WalletRemoteDataSource {
@@ -59,6 +85,75 @@ class WalletRemoteDataSourceImpl implements WalletRemoteDataSource {
     final res = await _client
         .post<Map<String, dynamic>>(ApiEndpoints.walletDemoTopup);
     // Shape: { "data": { "credits_added": 100, "credit_balance": 200 } }
+    final data = res.data?['data'];
+    if (data is Map && data['credit_balance'] is num) {
+      return (data['credit_balance'] as num).toInt();
+    }
+    return 0;
+  }
+
+  @override
+  Future<CheckoutOrder> checkout(int creditPackageId) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.walletCheckout,
+      data: {'credit_package_id': creditPackageId},
+    );
+    return ApiEnvelope.object(res.data, CheckoutOrder.fromJson);
+  }
+
+  @override
+  Future<int> verify({
+    required int paymentId,
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+  }) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.walletVerify,
+      data: {
+        'payment_id': paymentId,
+        'razorpay_order_id': razorpayOrderId,
+        'razorpay_payment_id': razorpayPaymentId,
+        'razorpay_signature': razorpaySignature,
+      },
+    );
+    final data = res.data?['data'];
+    if (data is Map && data['credit_balance'] is num) {
+      return (data['credit_balance'] as num).toInt();
+    }
+    return 0;
+  }
+
+  @override
+  Future<void> reportOutcome({
+    required int paymentId,
+    required String status,
+  }) async {
+    await _client.post<dynamic>(
+      ApiEndpoints.walletPaymentOutcome(paymentId),
+      data: {'status': status},
+    );
+  }
+
+  @override
+  Future<int> verifyIap({
+    required int creditPackageId,
+    required String platform,
+    required String receipt,
+    String? productId,
+    String? transactionId,
+  }) async {
+    final body = <String, dynamic>{
+      'credit_package_id': creditPackageId,
+      'platform': platform,
+      'receipt': receipt,
+    };
+    if (productId != null) body['product_id'] = productId;
+    if (transactionId != null) body['transaction_id'] = transactionId;
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.walletIapVerify,
+      data: body,
+    );
     final data = res.data?['data'];
     if (data is Map && data['credit_balance'] is num) {
       return (data['credit_balance'] as num).toInt();

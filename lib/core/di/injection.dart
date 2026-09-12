@@ -2,6 +2,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_it/get_it.dart';
 
 import '../network/api_client.dart';
+import '../push/push_service.dart';
+import '../realtime/socket_service.dart';
 import '../network/network_info.dart';
 import '../permissions/permission_manager.dart';
 import '../storage/storage_manager.dart';
@@ -16,6 +18,12 @@ import '../../features/feed/data/repositories/feed_repository_impl.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/presentation/cubit/create_post_cubit.dart';
 import '../../features/feed/presentation/cubit/feed_cubit.dart';
+import '../../features/business/data/datasources/business_directory_data_source.dart';
+import '../../features/business/data/repositories/business_directory_repository_impl.dart';
+import '../../features/business/domain/repositories/business_directory_repository.dart';
+import '../../features/orders/data/orders_remote_data_source.dart';
+import '../../features/orders/data/orders_repository_impl.dart';
+import '../../features/orders/domain/orders_repository.dart';
 import '../../features/chat/data/datasources/chat_remote_data_source.dart';
 import '../../features/chat/data/repositories/chat_repository_impl.dart';
 import '../../features/chat/domain/repositories/chat_repository.dart';
@@ -135,6 +143,9 @@ void registerFeatureDependencies() {
   );
   // Single app-wide session cubit (shared by the router guard and the UI).
   sl.registerSingleton<AuthCubit>(AuthCubit(sl<AuthRepository>()));
+  sl.registerLazySingleton<PushService>(() => PushService(sl<ApiClient>()));
+  sl.registerLazySingleton<SocketService>(
+      () => SocketService(sl<ApiClient>(), sl<StorageManager>()));
   // Fresh form cubits per page mount.
   sl.registerFactory<LoginCubit>(() => LoginCubit(sl<AuthRepository>()));
   sl.registerFactory<RegisterCubit>(() => RegisterCubit(sl<AuthRepository>()));
@@ -168,12 +179,20 @@ void registerFeatureDependencies() {
     () => BusinessProfileCubit(sl<ProfileRepository>(), sl<SubscriptionRepository>()),
   );
 
-  // Business feed (Business tab).
-  sl.registerLazySingleton<BusinessRemoteDataSource>(
-    () => BusinessRemoteDataSourceImpl(sl<ApiClient>()),
+  // Business directory (/businesses).
+  sl.registerLazySingleton<BusinessDirectoryDataSource>(
+    () => BusinessDirectoryDataSourceImpl(sl<ApiClient>()),
   );
-  sl.registerLazySingleton<BusinessRepository>(
-    () => BusinessRepositoryImpl(sl<BusinessRemoteDataSource>()),
+  sl.registerLazySingleton<BusinessDirectoryRepository>(
+    () => BusinessDirectoryRepositoryImpl(sl<BusinessDirectoryDataSource>()),
+  );
+
+  // Orders (create only in current docs).
+  sl.registerLazySingleton<OrdersRemoteDataSource>(
+    () => OrdersRemoteDataSourceImpl(sl<ApiClient>()),
+  );
+  sl.registerLazySingleton<OrdersRepository>(
+    () => OrdersRepositoryImpl(sl<OrdersRemoteDataSource>()),
   );
 
   // Notifications.

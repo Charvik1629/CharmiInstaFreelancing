@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/error/failure.dart';
 import '../../../../core/models/user.dart';
 import '../../../../core/utils/result.dart';
 import '../../../search/domain/repositories/search_repository.dart';
@@ -54,7 +55,11 @@ class CreateBroadcastCubit extends Cubit<CreateBroadcastState> {
       case Success(value: final detail):
         emit(state.copyWith(status: CreateStatus.success, created: detail));
       case Err(failure: final f):
-        emit(state.copyWith(status: CreateStatus.failure, errorMessage: f.message));
+        emit(state.copyWith(
+          status: CreateStatus.failure,
+          errorMessage: f.message,
+          insufficientCredits: f is InsufficientCreditsFailure,
+        ));
     }
   }
 }

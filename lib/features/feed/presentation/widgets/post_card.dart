@@ -21,6 +21,7 @@ class PostCard extends StatelessWidget {
     required this.onDelete,
     this.onEditDeferred,
     this.onBoost,
+    this.onMarkSold,
     this.onOffer,
     this.onTap,
   });
@@ -33,6 +34,9 @@ class PostCard extends StatelessWidget {
 
   /// Boosts the post (owner). Wired to the real boost API.
   final VoidCallback? onBoost;
+
+  /// Marks the post sold (owner). Wired to POST /loads/{id}/sold.
+  final VoidCallback? onMarkSold;
 
   /// Shown as a "Make offer" action when the load allows it (can_make_offer).
   final VoidCallback? onOffer;
@@ -56,7 +60,7 @@ class PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost),
+          _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
           if (load.hasImage) _Media(url: load.mediaUrl!) else if (load.hasFile) _FileChip(load: load),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -88,6 +92,7 @@ class _Header extends StatelessWidget {
     required this.onDelete,
     this.onEditDeferred,
     this.onBoost,
+    this.onMarkSold,
   });
   final Load load;
   final VoidCallback onReport;
@@ -96,6 +101,7 @@ class _Header extends StatelessWidget {
 
   /// Boosts the post (owner). Wired to the real boost API.
   final VoidCallback? onBoost;
+  final VoidCallback? onMarkSold;
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +141,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           if (load.isBoosted) _BoostedBadge(),
-          _OverflowMenu(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost),
+          _OverflowMenu(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
         ],
       ),
     );
@@ -167,6 +173,7 @@ class _OverflowMenu extends StatelessWidget {
     required this.onDelete,
     this.onEditDeferred,
     this.onBoost,
+    this.onMarkSold,
   });
   final Load load;
   final VoidCallback onReport;
@@ -175,48 +182,167 @@ class _OverflowMenu extends StatelessWidget {
 
   /// Boosts the post (owner). Wired to the real boost API.
   final VoidCallback? onBoost;
+  final VoidCallback? onMarkSold;
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
+    return IconButton(
       icon: const Icon(Icons.more_horiz),
-      onSelected: (v) {
-        switch (v) {
-          case 'report': onReport();
-          case 'delete': onDelete();
-          case 'edit': onEditDeferred?.call();
-          case 'boost': onBoost?.call();
-        }
-      },
-      itemBuilder: (context) => [
-        if (load.isOwn) ...[
-          if (load.canEdit)
-            const PopupMenuItem(value: 'edit', child: _MenuRow(Icons.edit_outlined, 'Edit post')),
-          if (load.canBoost)
-            const PopupMenuItem(value: 'boost', child: _MenuRow(Icons.rocket_launch, 'Boost post')),
-          if (load.canDelete)
-            const PopupMenuItem(value: 'delete', child: _MenuRow(Icons.delete_outline, 'Delete', danger: true)),
-        ] else if (load.canReport)
-          const PopupMenuItem(value: 'report', child: _MenuRow(Icons.flag_outlined, 'Report')),
-      ],
+      onPressed: () => _open(context),
     );
+  }
+
+  /// Design "Post Menu" — a bottom sheet (matching the Business ⋯ menu), not a
+  /// dropdown. Owner sees Edit / Boost / Mark sold / Delete; others see Report.
+  Future<void> _open(BuildContext context) async {
+    final nex = context.nexveero;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: nex.border,
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                child: Text('POST OPTIONS',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: nex.textSecondary)),
+              ),
+              if (load.isOwn) ...[
+                if (load.canEdit)
+                  _SheetRow(
+                      icon: Icons.edit_outlined,
+                      tint: nex.gradientStart,
+                      title: 'Edit post',
+                      subtitle: 'Update photos, caption, or details',
+                      onTap: () => Navigator.of(ctx).pop('edit')),
+                if (load.canBoost)
+                  _SheetRow(
+                      icon: Icons.rocket_launch,
+                      tint: nex.gradientEnd,
+                      title: 'Boost post',
+                      subtitle: 'Feature it to more people',
+                      onTap: () => Navigator.of(ctx).pop('boost')),
+                if (onMarkSold != null)
+                  _SheetRow(
+                      icon: Icons.check_circle_outline,
+                      tint: nex.success,
+                      title: 'Mark as sold',
+                      subtitle: 'Close it to new requests',
+                      onTap: () => Navigator.of(ctx).pop('sold')),
+                if (load.canDelete)
+                  _SheetRow(
+                      icon: Icons.delete_outline,
+                      tint: Theme.of(ctx).colorScheme.error,
+                      title: 'Delete',
+                      subtitle: 'Remove this post',
+                      danger: true,
+                      onTap: () => Navigator.of(ctx).pop('delete')),
+              ] else if (load.canReport)
+                _SheetRow(
+                    icon: Icons.flag_outlined,
+                    tint: Theme.of(ctx).colorScheme.error,
+                    title: 'Report',
+                    subtitle: 'Flag this post for review',
+                    onTap: () => Navigator.of(ctx).pop('report')),
+            ],
+          ),
+        ),
+      ),
+    );
+    switch (action) {
+      case 'report':
+        onReport();
+      case 'delete':
+        onDelete();
+      case 'edit':
+        onEditDeferred?.call();
+      case 'boost':
+        onBoost?.call();
+      case 'sold':
+        onMarkSold?.call();
+    }
   }
 }
 
-class _MenuRow extends StatelessWidget {
-  const _MenuRow(this.icon, this.label, {this.danger = false});
+/// A design-styled option row (icon tile + title + subtitle) for the post menu.
+class _SheetRow extends StatelessWidget {
+  const _SheetRow({
+    required this.icon,
+    required this.tint,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.danger = false,
+  });
   final IconData icon;
-  final String label;
+  final Color tint;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? Theme.of(context).colorScheme.error : null;
-    return Row(children: [
-      Icon(icon, size: 20, color: color),
-      const SizedBox(width: AppSpacing.md),
-      Text(label, style: TextStyle(color: color)),
-    ]);
+    final nex = context.nexveero;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Icon(icon, size: 22, color: tint),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: danger
+                              ? Theme.of(context).colorScheme.error
+                              : null)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: nex.textSecondary)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: nex.iconInactive),
+          ],
+        ),
+      ),
+    );
   }
 }
 

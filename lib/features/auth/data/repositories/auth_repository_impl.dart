@@ -79,6 +79,12 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
   }
 
   @override
+  Future<Result<void>> deleteAccount(String password) => guard(() async {
+        await _remote.deleteAccount(password);
+        await _storage.clearSession();
+      });
+
+  @override
   Future<void> persistSession(AuthSession session) async {
     await _storage.writeSecure(StorageKeys.authToken, session.token);
     await _cacheUser(session.user);

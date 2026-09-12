@@ -20,6 +20,10 @@ abstract class FeedRemoteDataSource {
   /// attached, otherwise a plain JSON body. Returns the created [Load].
   Future<Load> createLoad(NewPost post);
 
+  /// Updates an owned post (POST /loads/{id} — the API accepts POST for updates
+  /// so multipart image edits work). Returns the updated [Load].
+  Future<Load> updateLoad(int id, NewPost post);
+
   /// Opens (or reuses) a chat with the load's author. Returns conversationId.
   Future<int?> requestLoad(int id);
 
@@ -34,6 +38,9 @@ abstract class FeedRemoteDataSource {
 
   /// POST /loads/{id}/boost — owner boosts an active post (debits credits).
   Future<Load> boostLoad(int id);
+
+  /// POST /loads/{id}/sold — owner marks the post as sold/closed.
+  Future<Load> markSold(int id);
 }
 
 class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
@@ -58,20 +65,16 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
     return ApiEnvelope.list(res.data, Load.fromJson);
   }
 
-  @override
-  Future<Load> createLoad(NewPost post) async {
+  /// Builds the POST/PUT body for a load. Multipart when there's an image;
+  /// JSON otherwise.
+  Future<Object> _loadBody(NewPost post) async {
     final fields = <String, dynamic>{
       'title': post.title,
       if (post.body != null && post.body!.isNotEmpty) 'body': post.body,
       if (post.postTypeId != null) 'post_type_id': post.postTypeId,
     };
-
-    // With an image we must use multipart; text-only posts send JSON so the
-    // server sees the same shape the rest of the API uses. Tags go as `tag_ids`
-    // (JSON array) or repeated `tag_ids[]` fields (multipart).
-    final Object body;
     if (post.hasImage) {
-      body = FormData.fromMap({
+      return FormData.fromMap({
         ...fields,
         if (post.tagIds.isNotEmpty) 'tag_ids[]': post.tagIds,
         'media': await MultipartFile.fromFile(
@@ -79,16 +82,27 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
           filename: post.imagePath!.split('/').last,
         ),
       });
-    } else {
-      body = {
-        ...fields,
-        if (post.tagIds.isNotEmpty) 'tag_ids': post.tagIds,
-      };
     }
+    return {
+      ...fields,
+      if (post.tagIds.isNotEmpty) 'tag_ids': post.tagIds,
+    };
+  }
 
+  @override
+  Future<Load> createLoad(NewPost post) async {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.loads,
-      data: body,
+      data: await _loadBody(post),
+    );
+    return ApiEnvelope.object(res.data, Load.fromJson);
+  }
+
+  @override
+  Future<Load> updateLoad(int id, NewPost post) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.load(id),
+      data: await _loadBody(post),
     );
     return ApiEnvelope.object(res.data, Load.fromJson);
   }
@@ -129,6 +143,13 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
   Future<Load> boostLoad(int id) async {
     final res =
         await _client.post<Map<String, dynamic>>(ApiEndpoints.loadBoost(id));
+    return ApiEnvelope.object(res.data, Load.fromJson);
+  }
+
+  @override
+  Future<Load> markSold(int id) async {
+    final res =
+        await _client.post<Map<String, dynamic>>(ApiEndpoints.loadSold(id));
     return ApiEnvelope.object(res.data, Load.fromJson);
   }
 }

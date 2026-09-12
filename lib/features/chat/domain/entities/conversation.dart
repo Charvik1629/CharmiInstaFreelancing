@@ -29,6 +29,7 @@ class Conversation extends Equatable {
     required this.title,
     this.subtitle,
     this.avatarUrl,
+    this.peerId,
     this.lastMessage,
     this.lastMessageAt,
     this.unreadCount = 0,
@@ -44,6 +45,10 @@ class Conversation extends Equatable {
   final String title;
   final String? subtitle;
   final String? avatarUrl;
+
+  /// The other user's id for a direct chat (used for block/profile). Null for
+  /// groups and broadcasts.
+  final int? peerId;
 
   /// A short preview of the last message (already collapsed from body /
   /// attachment). Null when the thread has no messages yet.
@@ -68,6 +73,7 @@ class Conversation extends Equatable {
       subtitle: json.asString('subtitle'),
       avatarUrl: json.asString('avatar_url') ??
           json.asMap('peer')?.asString('avatar_url'),
+      peerId: json.asMap('peer')?.asInt('id'),
       lastMessage: _preview(last),
       lastMessageAt: last?.asDate('created_at'),
       unreadCount: json.asIntOr('unread_count', 0),
@@ -93,6 +99,7 @@ class Conversation extends Equatable {
       type: ConversationType.fromApi(json.asString('type')),
       title: peer?.asStringOr('name', 'Chat') ?? 'Chat',
       avatarUrl: peer?.asString('avatar_url'),
+      peerId: peer?.asInt('id'),
       canChat: true,
     );
   }
@@ -136,6 +143,7 @@ class Conversation extends Equatable {
         title,
         subtitle,
         avatarUrl,
+        peerId,
         lastMessage,
         lastMessageAt,
         unreadCount,

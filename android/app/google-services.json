@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "904914412878",
+    "project_id": "nexveero-1e4f0",
+    "storage_bucket": "nexveero-1e4f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:904914412878:android:4c0ab0384ee917f2c32a1f",
+        "android_client_info": {
+          "package_name": "com.nexveero.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLJvNYtcRQMqtnGDlTdw3-tGroapfi9PQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

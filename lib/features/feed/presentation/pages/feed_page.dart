@@ -10,8 +10,12 @@ import '../../../../core/models/load.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../chat/domain/entities/conversation.dart';
 import '../../../offers/presentation/widgets/make_offer_sheet.dart';
+import '../../../wallet/domain/repositories/wallet_repository.dart';
 import '../cubit/feed_cubit.dart';
+import '../widgets/boost_confirm_dialog.dart';
+import '../widgets/request_success_sheet.dart';
 import '../widgets/feed_ad_slot.dart';
 import '../widgets/post_card.dart';
 import '../widgets/suggested_creators_strip.dart';
@@ -78,16 +82,30 @@ class _FeedViewState extends State<_FeedView> {
   Future<void> _request(Load load) async {
     final conversationId = await context.read<FeedCubit>().request(load);
     if (!mounted) return;
-    AppOverlays.snack(
+    if (conversationId == null) {
+      AppOverlays.snack(context, 'Could not send request');
+      return;
+    }
+    // Design "Request Success": a sheet confirming the auto-created chat.
+    final open = await RequestSuccessSheet.show(
       context,
-      conversationId != null
-          ? 'Request sent — chat opened'
-          : 'Could not send request',
+      peerName: load.author?.name ?? 'the seller',
+      peerAvatarUrl: load.author?.avatarUrl,
+    );
+    if (!open || !mounted) return;
+    context.push(
+      AppRoutes.chatThread,
+      extra: Conversation(
+        id: conversationId,
+        type: ConversationType.direct,
+        title: load.author?.name ?? 'Chat',
+        avatarUrl: load.author?.avatarUrl,
+      ),
     );
   }
 
   Future<void> _report(Load load) async {
-    final reason = await ReportSheet.show(context);
+    final reason = await ReportSheet.show(context, subtitle: load.title);
     if (reason == null || !mounted) return;
     final result = await context.read<FeedCubit>().report(load, reason);
     if (!mounted) return;
@@ -112,12 +130,14 @@ class _FeedViewState extends State<_FeedView> {
   }
 
   Future<void> _boost(Load load) async {
-    final confirmed = await AppOverlays.confirm(
+    // Pull the live cost + balance so the confirm card matches the design's
+    // Duration / Cost / Your balance breakdown.
+    final wallet = (await sl<WalletRepository>().getWallet()).valueOrNull;
+    if (!mounted) return;
+    final confirmed = await BoostConfirmDialog.show(
       context,
-      title: 'Boost this post?',
-      message: 'Your post will be featured to more people for a while. '
-          'This uses your wallet credits.',
-      confirmLabel: 'Boost',
+      cost: wallet?.boostCost ?? 20,
+      balance: wallet?.creditBalance ?? 0,
     );
     if (!confirmed || !mounted) return;
     final result = await context.read<FeedCubit>().boost(load);
@@ -127,6 +147,24 @@ class _FeedViewState extends State<_FeedView> {
       result.isSuccess
           ? 'Post boosted 🚀'
           : (result.failureOrNull?.message ?? 'Could not boost'),
+    );
+  }
+
+  Future<void> _markSold(Load load) async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: 'Mark as sold?',
+      message: 'This closes the post to new requests and offers.',
+      confirmLabel: 'Mark sold',
+    );
+    if (!ok || !mounted) return;
+    final result = await context.read<FeedCubit>().markSold(load);
+    if (!mounted) return;
+    AppOverlays.snack(
+      context,
+      result.isSuccess
+          ? 'Marked as sold'
+          : (result.failureOrNull?.message ?? 'Could not update'),
     );
   }
 
@@ -142,11 +180,6 @@ class _FeedViewState extends State<_FeedView> {
         centerTitle: true,
         title: _GradientWordmark(),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
-            onPressed: () => context.push(AppRoutes.search),
-          ),
           IconButton(
             icon: const Icon(Icons.notifications_none),
             tooltip: 'Notifications',
@@ -172,6 +205,7 @@ class _FeedViewState extends State<_FeedView> {
                 onDelete: _delete,
                 onOffer: _offer,
                 onBoost: _boost,
+                onMarkSold: _markSold,
               ),
             ),
           ),
@@ -218,6 +252,7 @@ class _FeedBody extends StatelessWidget {
     required this.onDelete,
     required this.onOffer,
     required this.onBoost,
+    required this.onMarkSold,
   });
 
   final FeedState state;
@@ -227,13 +262,14 @@ class _FeedBody extends StatelessWidget {
   final ValueChanged<Load> onDelete;
   final ValueChanged<Load> onOffer;
   final ValueChanged<Load> onBoost;
+  final ValueChanged<Load> onMarkSold;
 
   @override
   Widget build(BuildContext context) {
     switch (state.status) {
       case FeedStatus.initial:
       case FeedStatus.loading:
-        return const LoadingView();
+        return const FeedSkeleton();
       case FeedStatus.error:
         return ErrorView(
           message: state.errorMessage ?? 'Could not load the feed.',
@@ -288,8 +324,9 @@ class _FeedBody extends StatelessWidget {
                 onOffer: () => onOffer(load),
                 onTap: () => context.push(AppRoutes.postDetail, extra: load),
                 onBoost: () => onBoost(load),
+                onMarkSold: () => onMarkSold(load),
                 onEditDeferred: () =>
-                    AppOverlays.snack(context, 'Editing a post arrives soon.'),
+                    context.push(AppRoutes.createPost, extra: load),
               );
             },
           ),

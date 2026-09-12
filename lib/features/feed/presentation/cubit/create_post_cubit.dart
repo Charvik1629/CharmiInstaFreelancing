@@ -22,6 +22,20 @@ class CreatePostCubit extends Cubit<CreatePostState> {
   final FeedRepository _feed;
   final PostTypeRepository _postTypes;
 
+  /// Set when editing an existing post; drives update vs create on submit.
+  int? _editLoadId;
+
+  /// Prefills the composer to edit [load].
+  void seedForEdit(Load load) {
+    _editLoadId = load.id;
+    emit(state.copyWith(
+      title: load.title,
+      body: load.body ?? '',
+      selectedTypeId: load.postType?.id,
+      editing: true,
+    ));
+  }
+
   /// Fetches the categories for the picker. Failure is non-fatal — the user can
   /// still post without a category, so we just leave the list empty.
   Future<void> loadCategories() async {
@@ -78,13 +92,16 @@ class CreatePostCubit extends Cubit<CreatePostState> {
       clearError: true,
     ));
 
-    final result = await _feed.createLoad(NewPost(
+    final post = NewPost(
       title: state.title.trim(),
       body: state.body.trim().isEmpty ? null : state.body.trim(),
       postTypeId: state.selectedTypeId,
       imagePath: state.coverImagePath,
       tagIds: state.selectedTags.map((t) => t.id).toList(),
-    ));
+    );
+    final result = _editLoadId != null
+        ? await _feed.updateLoad(_editLoadId!, post)
+        : await _feed.createLoad(post);
 
     switch (result) {
       case Success(value: final load):

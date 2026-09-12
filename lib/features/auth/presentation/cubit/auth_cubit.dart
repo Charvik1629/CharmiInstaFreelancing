@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/models/user.dart';
+import '../../../../core/push/push_service.dart';
+import '../../../../core/realtime/socket_service.dart';
 import '../../../../core/utils/result.dart';
 import '../../domain/entities/auth_session.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -50,6 +55,13 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> onAuthenticated(AuthSession session) async {
     await _repository.persistSession(session);
     emit(AuthState(status: AuthStatus.authenticated, user: session.user));
+    // Register this device for push + open the realtime socket.
+    if (sl.isRegistered<PushService>()) {
+      unawaited(sl<PushService>().start());
+    }
+    if (sl.isRegistered<SocketService>()) {
+      unawaited(sl<SocketService>().connect());
+    }
   }
 
   /// Replaces the current user after a profile edit and re-caches it. No-op if
@@ -61,7 +73,23 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   Future<void> logout() async {
+    if (sl.isRegistered<PushService>()) {
+      await sl<PushService>().unregister();
+    }
+    if (sl.isRegistered<SocketService>()) {
+      await sl<SocketService>().disconnect();
+    }
     await _repository.logout();
     emit(const AuthState(status: AuthStatus.unauthenticated));
+  }
+
+  /// Permanently deletes the account (needs the password). On success the local
+  /// session is cleared and the app returns to unauthenticated.
+  Future<Result<void>> deleteAccount(String password) async {
+    final result = await _repository.deleteAccount(password);
+    if (result.isSuccess) {
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    }
+    return result;
   }
 }
