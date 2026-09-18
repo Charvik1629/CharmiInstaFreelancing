@@ -13,8 +13,9 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
   final ChatRemoteDataSource _remote;
 
   @override
-  Future<Result<List<Conversation>>> getChats() =>
-      guard(() => _remote.getChats());
+  Future<Result<List<Conversation>>> getChats(
+          {String? hasMedia, bool hasLinks = false}) =>
+      guard(() => _remote.getChats(hasMedia: hasMedia, hasLinks: hasLinks));
 
   @override
   Future<Result<List<Conversation>>> getBroadcasts() =>
@@ -50,6 +51,21 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
   @override
   Future<Result<void>> deleteMessage(int conversationId, int messageId) =>
       guard(() => _remote.deleteMessage(conversationId, messageId));
+
+  @override
+  Future<Result<void>> starMessage(int conversationId, int messageId,
+          {required bool star}) =>
+      guard(() =>
+          _remote.starMessage(conversationId, messageId, star: star));
+
+  @override
+  Future<Result<void>> pinConversation(int conversationId,
+          {required bool pin}) =>
+      guard(() => _remote.pinConversation(conversationId, pin: pin));
+
+  @override
+  Future<Result<List<ChatMessage>>> getStarredMessages() =>
+      guard(() => _remote.getStarredMessages());
 
   @override
   Future<Result<ChatMessage>> sendMeta({

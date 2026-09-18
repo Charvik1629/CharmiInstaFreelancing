@@ -55,18 +55,31 @@ class _CreatePostViewState extends State<_CreatePostView> {
       context,
       builder: (sheetCtx) => Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Photo library'),
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: AppSpacing.xs),
+            child: Text('ADD PHOTO',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: sheetCtx.nexveero.textSecondary)),
+          ),
+          _AttachOption(
+            icon: Icons.photo_library_outlined,
+            title: 'Photo',
+            subtitle: 'Share images from gallery',
             onTap: () {
               Navigator.of(sheetCtx).pop();
               _pickFromGallery();
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take photo'),
+          Divider(height: 1, color: sheetCtx.nexveero.border),
+          _AttachOption(
+            icon: Icons.photo_camera_outlined,
+            title: 'Camera',
+            subtitle: 'Take a new photo',
             onTap: () {
               Navigator.of(sheetCtx).pop();
               _pickFromCamera();
@@ -79,8 +92,9 @@ class _CreatePostViewState extends State<_CreatePostView> {
 
   Future<void> _pickFromGallery() async {
     final cubit = context.read<CreatePostCubit>();
-    final outcome = await PermissionFlow.ensure(context, AppPermission.photos);
-    if (!outcome.isUsable) return;
+    // No permission gate: image_picker uses the Android Photo Picker / iOS
+    // picker, which grants access to the chosen items without a runtime
+    // permission. Gating it behind READ_MEDIA_IMAGES silently blocked "Add".
     try {
       final files = await _picker.pickMultiImage(maxWidth: 1600, imageQuality: 85);
       for (final f in files) {
@@ -196,31 +210,40 @@ class _ImageStrip extends StatelessWidget {
       builder: (context, state) {
         final cubit = context.read<CreatePostCubit>();
         final paths = state.imagePaths;
+        // Design: a 3-column grid of square tiles (repeat(3,1fr), 8px gap); the
+        // "Add" tile is simply the next cell. Long-press a thumbnail to reorder.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: 104,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (paths.isNotEmpty)
-                    Expanded(
-                      child: ReorderableListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        onReorderItem: cubit.reorderImages,
-                        itemCount: paths.length,
-                        itemBuilder: (context, i) => _Thumb(
-                          key: ValueKey(paths[i]),
-                          path: paths[i],
-                          index: i,
-                          onRemove: () => cubit.removeImageAt(i),
-                        ),
+            GridView.count(
+              crossAxisCount: 3,
+              mainAxisSpacing: AppSpacing.sm,
+              crossAxisSpacing: AppSpacing.sm,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (var i = 0; i < paths.length; i++)
+                  DragTarget<int>(
+                    key: ValueKey(paths[i]),
+                    onWillAcceptWithDetails: (d) => d.data != i,
+                    onAcceptWithDetails: (d) => cubit.reorderImages(d.data, i),
+                    builder: (context, candidate, rejected) =>
+                        LongPressDraggable<int>(
+                      data: i,
+                      feedback: _Thumb(
+                          path: paths[i], index: i, onRemove: () {}, size: 96),
+                      childWhenDragging: _ThumbPlaceholder(
+                          highlighted: candidate.isNotEmpty),
+                      child: _Thumb(
+                        path: paths[i],
+                        index: i,
+                        onRemove: () => cubit.removeImageAt(i),
                       ),
                     ),
+                  ),
+                if (paths.length < CreatePostCubit.maxImages)
                   _AddTile(onTap: onAdd),
-                ],
-              ),
+              ],
             ),
             if (paths.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.sm),
@@ -236,16 +259,6 @@ class _ImageStrip extends StatelessWidget {
                 ],
               ),
             ],
-            if (state.hasExtraImages) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Only the first photo is uploaded for now (multi-photo posts are coming soon).',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: context.nexveero.warning),
-              ),
-            ],
           ],
         );
       },
@@ -255,52 +268,133 @@ class _ImageStrip extends StatelessWidget {
 
 class _Thumb extends StatelessWidget {
   const _Thumb(
-      {super.key, required this.path, required this.index, required this.onRemove});
+      {required this.path,
+      required this.index,
+      required this.onRemove,
+      this.size});
 
   final String path;
   final int index;
   final VoidCallback onRemove;
 
+  /// When set, renders at a fixed square size (for the drag feedback, which sits
+  /// outside the grid's layout). Null = fill the grid cell.
+  final double? size;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: AppSpacing.sm),
-      child: SizedBox(
-        width: 96,
-        height: 96,
-        child: Stack(
+    final tile = Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Image.file(File(path),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  Container(color: context.nexveero.elevated)),
+        ),
+        Positioned(
+          left: 6,
+          bottom: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Text('${index + 1}',
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: const CircleAvatar(
+              radius: 11,
+              backgroundColor: Colors.black54,
+              child: Icon(Icons.close, size: 14, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+    if (size == null) return tile;
+    // Drag feedback: fixed size + a Material ancestor for the badge's Text.
+    return Material(
+      color: Colors.transparent,
+      child: SizedBox(width: size, height: size, child: tile),
+    );
+  }
+}
+
+/// The empty slot shown while a thumbnail is being dragged (keeps the grid cell
+/// and highlights when a drop is hovering).
+class _ThumbPlaceholder extends StatelessWidget {
+  const _ThumbPlaceholder({required this.highlighted});
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.nexveero.elevated,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: highlighted
+            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5)
+            : null,
+      ),
+    );
+  }
+}
+
+/// A row in the "ADD PHOTO"/attach sheet (design: 40×40 tinted icon tile with a
+/// title + subtitle).
+class _AttachOption extends StatelessWidget {
+  const _AttachOption(
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      required this.onTap});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: Image.file(File(path),
-                  width: 96, height: 96, fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) =>
-                      Container(width: 96, height: 96, color: context.nexveero.elevated)),
-            ),
-            Positioned(
-              left: 6,
-              bottom: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Text('${index + 1}',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
+              child: Icon(icon, size: 22, color: primary),
             ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: GestureDetector(
-                onTap: onRemove,
-                child: const CircleAvatar(
-                  radius: 11,
-                  backgroundColor: Colors.black54,
-                  child: Icon(Icons.close, size: 14, color: Colors.white),
-                ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 11, color: context.nexveero.textSecondary)),
+                ],
               ),
             ),
           ],
@@ -334,7 +428,8 @@ class _AddTile extends StatelessWidget {
   }
 }
 
-/// A 96×96 dashed-border tile (design: the "Add" placeholder).
+/// A square dashed-border tile (design: the "Add" placeholder). Fills whatever
+/// square cell the grid gives it.
 class DottedBorderBox extends StatelessWidget {
   const DottedBorderBox({super.key, required this.child});
   final Widget child;
@@ -344,7 +439,7 @@ class DottedBorderBox extends StatelessWidget {
     return CustomPaint(
       painter: _DashedRectPainter(
           color: context.nexveero.border, radius: AppRadius.md),
-      child: SizedBox(width: 96, height: 96, child: Center(child: child)),
+      child: SizedBox.expand(child: Center(child: child)),
     );
   }
 }
@@ -398,29 +493,25 @@ class _CaptionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Single content field (maps to the post title). Caption removed.
               TextField(
                 onChanged: cubit.setTitle,
-                maxLength: 120,
+                maxLength: 255,
+                minLines: 2,
+                maxLines: 6,
                 style: Theme.of(context).textTheme.titleMedium,
+                // The card is the field's surface — strip the theme fill + focus
+                // border so focusing doesn't draw a box inside the card.
                 decoration: InputDecoration(
                   isDense: true,
+                  filled: false,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
                   counterText: '',
                   hintText: 'Write something…',
                   errorText: state.fieldErrors['title'],
-                ),
-              ),
-              const Divider(height: 1),
-              const SizedBox(height: AppSpacing.xs),
-              TextField(
-                onChanged: cubit.setBody,
-                maxLines: 4,
-                minLines: 2,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  hintText: 'Add a caption…',
-                  errorText: state.fieldErrors['body'],
                 ),
               ),
             ],

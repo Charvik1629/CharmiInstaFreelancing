@@ -5,8 +5,9 @@ import '../entities/auth_session.dart';
 /// Auth domain contract. The repository also owns token/user persistence so the
 /// rest of the app only deals with [AuthSession]/[User], never storage keys.
 abstract class AuthRepository {
+  /// [identifier] is the username, email, or mobile number.
   Future<Result<AuthSession>> login({
-    required String email,
+    required String identifier,
     required String password,
   });
 
@@ -14,6 +15,7 @@ abstract class AuthRepository {
   /// pending`); no session is issued until an admin approves.
   Future<Result<User>> register({
     required String name,
+    required String username,
     required String businessName,
     required String phone,
     required String email,

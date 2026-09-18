@@ -56,7 +56,8 @@ class _AdminBroadcastLimitsPageState extends State<AdminBroadcastLimitsPage> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg,
+            AppSpacing.lg + MediaQuery.paddingOf(context).bottom),
         children: [
           _Group(
             label: 'PER CHAT LIST',

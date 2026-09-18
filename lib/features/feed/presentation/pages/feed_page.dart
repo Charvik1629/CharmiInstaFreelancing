@@ -18,7 +18,6 @@ import '../widgets/boost_confirm_dialog.dart';
 import '../widgets/request_success_sheet.dart';
 import '../widgets/feed_ad_slot.dart';
 import '../widgets/post_card.dart';
-import '../widgets/suggested_creators_strip.dart';
 import '../widgets/report_sheet.dart';
 
 /// The home feed. Lists posts (loads) with filters, pull-to-refresh and
@@ -299,11 +298,8 @@ class _FeedBody extends StatelessWidget {
           child: ListView.builder(
             controller: scrollController,
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            // +1 for the "Suggested creators" header strip at the top.
-            itemCount: 1 + entries.length + (state.isLoadingMore ? 1 : 0),
-            itemBuilder: (context, rawIndex) {
-              if (rawIndex == 0) return const SuggestedCreatorsStrip();
-              final index = rawIndex - 1;
+            itemCount: entries.length + (state.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
               if (index >= entries.length) {
                 return const Padding(
                   padding: EdgeInsets.all(AppSpacing.lg),

@@ -98,7 +98,7 @@ class _TagFormSheetState extends State<TagFormSheet> {
                 builder: (field) => AppTextField(
                   controller: _name,
                   label: 'Name',
-                  hint: 'Full Truck Load',
+                  hint: 'Enter tag name',
                   onChanged: field.didChange,
                   errorText: field.errorText,
                 ),
@@ -107,7 +107,7 @@ class _TagFormSheetState extends State<TagFormSheet> {
               AppTextField(
                 controller: _slug,
                 label: 'Slug (optional)',
-                hint: 'full-truck-load — auto from name if blank',
+                hint: 'Enter slug (optional)',
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp('[a-z0-9-]')),
                 ],
@@ -125,7 +125,7 @@ class _TagFormSheetState extends State<TagFormSheet> {
                 builder: (field) => AppTextField(
                   controller: _sortOrder,
                   label: 'Sort order',
-                  hint: '0',
+                  hint: 'Enter sort order',
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onChanged: field.didChange,

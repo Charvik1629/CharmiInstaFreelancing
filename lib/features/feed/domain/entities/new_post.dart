@@ -5,7 +5,7 @@ class NewPost {
     required this.title,
     this.body,
     this.postTypeId,
-    this.imagePath,
+    this.imagePaths = const [],
     this.tagIds = const [],
   });
 
@@ -15,11 +15,12 @@ class NewPost {
   /// Selected category id (from PostType). Null = server default.
   final int? postTypeId;
 
-  /// Local file path of an attached image, or null for a text-only post.
-  final String? imagePath;
+  /// Local file paths of attached media, in order. Sent as a `media[]` carousel
+  /// on POST /loads (max 10). Empty for a text-only post.
+  final List<String> imagePaths;
 
   /// Selected tag ids (from GET /tags) sent as `tag_ids` on POST /loads.
   final List<int> tagIds;
 
-  bool get hasImage => imagePath != null && imagePath!.isNotEmpty;
+  bool get hasImage => imagePaths.isNotEmpty;
 }

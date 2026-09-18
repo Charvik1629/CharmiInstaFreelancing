@@ -14,6 +14,9 @@ class ChatMessage extends Equatable {
     this.attachmentUrl,
     this.attachmentName,
     this.isBroadcast = false,
+    this.isSystem = false,
+    this.isStarred = false,
+    this.conversationId,
     this.order,
     this.createdAt,
   });
@@ -34,6 +37,16 @@ class ChatMessage extends Equatable {
 
   final bool isBroadcast;
 
+  /// A server-generated event line (`type: "system"`), e.g. "X requested load …"
+  /// or "Y made an offer …" — rendered as a centered banner, not a bubble.
+  final bool isSystem;
+
+  /// Whether the current user has starred this message.
+  final bool isStarred;
+
+  /// Owning conversation id (set on the starred-messages list, for navigation).
+  final int? conversationId;
+
   /// Order payload when this message is an order card (`type: "order"`).
   final MessageOrder? order;
 
@@ -52,10 +65,28 @@ class ChatMessage extends Equatable {
   /// True when this message was sent by [meId] (drives bubble alignment).
   bool isMine(int? meId) => meId != null && senderId == meId;
 
+  ChatMessage copyWith({bool? isStarred}) => ChatMessage(
+        id: id,
+        body: body,
+        senderId: senderId,
+        senderName: senderName,
+        imageUrl: imageUrl,
+        attachmentKind: attachmentKind,
+        attachmentUrl: attachmentUrl,
+        attachmentName: attachmentName,
+        isBroadcast: isBroadcast,
+        isSystem: isSystem,
+        isStarred: isStarred ?? this.isStarred,
+        conversationId: conversationId,
+        order: order,
+        createdAt: createdAt,
+      );
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final sender = json.asMap('sender');
     final orderJson = json.asMap('order');
-    final isOrderType = json.asString('type') == 'order' || orderJson != null;
+    final type = json.asString('type');
+    final isOrderType = type == 'order' || orderJson != null;
     final attachments = json['attachments'];
     String? image;
     String? kind, url, name;
@@ -81,6 +112,9 @@ class ChatMessage extends Equatable {
       attachmentUrl: url,
       attachmentName: name,
       isBroadcast: json.asBool('is_broadcast'),
+      isSystem: type == 'system',
+      isStarred: json.asBool('is_starred'),
+      conversationId: json.asInt('conversation_id'),
       order: isOrderType ? MessageOrder.fromJson(orderJson ?? json) : null,
       createdAt: json.asDate('created_at'),
     );
@@ -97,6 +131,9 @@ class ChatMessage extends Equatable {
         attachmentUrl,
         attachmentName,
         isBroadcast,
+        isSystem,
+        isStarred,
+        conversationId,
         order,
         createdAt,
       ];

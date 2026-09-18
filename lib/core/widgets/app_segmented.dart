@@ -20,7 +20,6 @@ class AppSegmented extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nexveero = context.nexveero;
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xs),
       decoration: BoxDecoration(
@@ -41,13 +40,22 @@ class AppSegmented extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: i == selectedIndex ? scheme.surface : Colors.transparent,
+                    // Selected segment gets the Aurora Bloom gradient (design:
+                    // the selected filter pill), so the active tab is obvious.
+                    gradient: i == selectedIndex
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [nexveero.gradientStart, nexveero.gradientEnd],
+                          )
+                        : null,
+                    color: i == selectedIndex ? null : Colors.transparent,
                     borderRadius: BorderRadius.circular(AppRadius.full),
                     boxShadow: i == selectedIndex
                         ? [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 6,
+                              color: nexveero.gradientStart.withValues(alpha: 0.28),
+                              blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
                           ]
@@ -57,8 +65,11 @@ class AppSegmented extends StatelessWidget {
                     segments[i],
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: i == selectedIndex
-                              ? scheme.onSurface
+                              ? Colors.white
                               : nexveero.textSecondary,
+                          fontWeight: i == selectedIndex
+                              ? FontWeight.w700
+                              : FontWeight.w600,
                           fontSize: 13,
                         ),
                   ),

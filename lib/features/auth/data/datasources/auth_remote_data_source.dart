@@ -9,12 +9,15 @@ import '../../domain/entities/auth_session.dart';
 /// Raw calls to the authentication endpoints. Throws [AppException] on failure
 /// (mapped by [ApiClient]); the repository converts those to typed failures.
 abstract class AuthRemoteDataSource {
-  Future<AuthSession> login({required String email, required String password});
+  /// [identifier] is the username, email, or mobile number.
+  Future<AuthSession> login(
+      {required String identifier, required String password});
 
   /// Creates a B2B account. Returns the created [User] (with
   /// `approval_status: pending`) — no token is issued until an admin approves.
   Future<User> register({
     required String name,
+    required String username,
     required String businessName,
     required String phone,
     required String email,
@@ -51,12 +54,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   @override
   Future<AuthSession> login({
-    required String email,
+    required String identifier,
     required String password,
   }) async {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.login,
-      data: {'email': email, 'password': password, 'device_name': _deviceName},
+      // `login` accepts username, email, or mobile number.
+      data: {
+        'login': identifier,
+        'password': password,
+        'device_name': _deviceName,
+      },
     );
     return ApiEnvelope.object(res.data, AuthSession.fromJson);
   }
@@ -64,6 +72,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<User> register({
     required String name,
+    required String username,
     required String businessName,
     required String phone,
     required String email,
@@ -78,6 +87,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       ApiEndpoints.register,
       data: {
         'name': name,
+        'username': username,
         'business_name': businessName,
         'phone': phone,
         'email': email,

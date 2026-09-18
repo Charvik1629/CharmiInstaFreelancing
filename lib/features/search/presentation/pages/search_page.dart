@@ -66,9 +66,15 @@ class _SearchViewState extends State<_SearchView> {
                     controller: _controller,
                     textInputAction: TextInputAction.search,
                     onChanged: (v) => context.read<SearchCubit>().onQueryChanged(v),
+                    // The pill container is the field's surface, so strip the
+                    // theme's fill + focus border (otherwise a box-in-a-box).
                     decoration: const InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
                       hintText: 'Search people',
                     ),
                   ),
@@ -266,7 +272,7 @@ class _UserRow extends StatelessWidget {
   /// their 4-digit PIN first, then opens the thread.
   Future<void> _startChat(BuildContext context, User user) async {
     final repo = sl<ChatRepository>();
-    final pinReq = await repo.chatPinRequired(user.id);
+    final pinReq = await AppLoader.run(repo.chatPinRequired(user.id));
     if (!context.mounted) return;
 
     String? pin;
@@ -279,7 +285,7 @@ class _UserRow extends StatelessWidget {
       if (pin == null) return; // cancelled
     }
 
-    final result = await repo.startChat(user.id, pin: pin);
+    final result = await AppLoader.run(repo.startChat(user.id, pin: pin));
     if (!context.mounted) return;
     switch (result) {
       case Success(value: final conversation):

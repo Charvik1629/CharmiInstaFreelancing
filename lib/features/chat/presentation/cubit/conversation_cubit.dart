@@ -26,6 +26,10 @@ class ConversationCubit extends Cubit<ConversationState> {
   final int? meId;
 
   StreamSubscription<RealtimeMessage>? _socketSub;
+  StreamSubscription<TypingEvent>? _typingSub;
+  StreamSubscription<ReadEvent>? _readSub;
+  StreamSubscription<PresenceEvent>? _presenceSub;
+  Timer? _typingClear;
 
   bool get canSend => conversation.canChat;
 
@@ -38,19 +42,123 @@ class ConversationCubit extends Cubit<ConversationState> {
     _socketSub = socket.messages
         .where((m) => m.conversationId == conversation.id)
         .listen((m) {
-      // Skip messages we already have (e.g. our own, appended on send).
-      if (state.messages.any((x) => x.id == m.message.id)) return;
+      // A live message can be the echo of one we just sent. Skip it if it's
+      // already here by server id, or if it's an un-idized echo of the tail.
+      if (_isLiveDuplicate(m.message)) return;
       emit(state.copyWith(
         messages: [...state.messages, m.message],
         status: ThreadStatus.loaded,
+        clearTyping: true,
       ));
       _markRead();
     });
+    // Peer "typing…" — auto-clears if no follow-up event arrives.
+    _typingSub = socket.typingEvents
+        .where((t) => t.conversationId == conversation.id)
+        .listen((t) {
+      _typingClear?.cancel();
+      if (t.isTyping) {
+        emit(state.copyWith(typingName: t.name ?? 'typing'));
+        _typingClear = Timer(const Duration(seconds: 5),
+            () => emit(state.copyWith(clearTyping: true)));
+      } else {
+        emit(state.copyWith(clearTyping: true));
+      }
+    });
+    // Peer read marker → drives the read tick on my messages.
+    _readSub = socket.readEvents
+        .where((r) => r.conversationId == conversation.id && r.userId != meId)
+        .listen((r) {
+      final prev = state.peerLastReadAt;
+      if (prev == null || r.lastReadAt.isAfter(prev)) {
+        emit(state.copyWith(peerLastReadAt: r.lastReadAt));
+      }
+    });
+    // Peer online / last-seen (direct chats): seed once, then track live.
+    final peerId = conversation.peerId;
+    if (peerId != null && conversation.type == ConversationType.direct) {
+      socket.checkPresence([peerId]).then((map) {
+        final info = map[peerId];
+        if (info != null && !isClosed) {
+          emit(state.copyWith(
+              peerOnline: info.isOnline, peerLastSeen: info.lastSeenAt));
+        }
+      });
+      _presenceSub = socket.presenceEvents
+          .where((p) => p.userId == peerId)
+          .listen((p) => emit(state.copyWith(
+              peerOnline: p.isOnline, peerLastSeen: p.lastSeenAt)));
+    }
+  }
+
+  Timer? _typingEmitStop;
+  bool _typingSent = false;
+
+  /// Call on each keystroke: emits `typing:start` once, then `typing:stop` after
+  /// a short idle gap (debounced so we don't flood the socket).
+  void notifyTyping() {
+    if (!sl.isRegistered<SocketService>()) return;
+    final socket = sl<SocketService>();
+    if (!_typingSent) {
+      socket.typing(conversation.id, started: true);
+      _typingSent = true;
+    }
+    _typingEmitStop?.cancel();
+    _typingEmitStop = Timer(const Duration(seconds: 2), () {
+      socket.typing(conversation.id, started: false);
+      _typingSent = false;
+    });
+  }
+
+  void _stopTyping() {
+    _typingEmitStop?.cancel();
+    if (_typingSent && sl.isRegistered<SocketService>()) {
+      sl<SocketService>().typing(conversation.id, started: false);
+    }
+    _typingSent = false;
+  }
+
+  bool _sameContent(ChatMessage a, ChatMessage b) =>
+      a.senderId == b.senderId &&
+      (a.body ?? '') == (b.body ?? '') &&
+      a.imageUrl == b.imageUrl;
+
+  /// Whether an incoming *socket* message is already in the thread: by server id
+  /// when it has one, otherwise an echo of our own just-sent tail message (the
+  /// authoritative copy from the send response stays).
+  bool _isLiveDuplicate(ChatMessage incoming) {
+    if (incoming.id > 0) {
+      return state.messages.any((x) => x.id == incoming.id);
+    }
+    final msgs = state.messages;
+    return msgs.isNotEmpty && _sameContent(msgs.last, incoming);
+  }
+
+  /// Appends the authoritative message from a send response — but if the live
+  /// socket already delivered the same one (matched by server id, or as an
+  /// un-idized echo), replaces that copy instead of adding a duplicate. Fixes the
+  /// race where the socket echo arrives before the POST response returns.
+  List<ChatMessage> _reconcile(ChatMessage message) {
+    final msgs = [...state.messages];
+    final at = msgs.indexWhere((x) =>
+        (message.id > 0 && x.id == message.id) ||
+        (x.id <= 0 && _sameContent(x, message)));
+    if (at >= 0) {
+      msgs[at] = message;
+    } else {
+      msgs.add(message);
+    }
+    return msgs;
   }
 
   @override
   Future<void> close() {
     _socketSub?.cancel();
+    _typingSub?.cancel();
+    _readSub?.cancel();
+    _presenceSub?.cancel();
+    _typingClear?.cancel();
+    _typingEmitStop?.cancel();
     return super.close();
   }
 
@@ -112,6 +220,7 @@ class ConversationCubit extends Cubit<ConversationState> {
   Future<void> _send({String body = '', String? imagePath}) async {
     final hasImage = imagePath != null && imagePath.isNotEmpty;
     if ((body.isEmpty && !hasImage) || state.isSending || !canSend) return;
+    _stopTyping();
     emit(state.copyWith(isSending: true, clearError: true));
     final result = await _repository.sendMessage(
       id: conversation.id,
@@ -122,7 +231,7 @@ class ConversationCubit extends Cubit<ConversationState> {
     switch (result) {
       case Success(value: final message):
         emit(state.copyWith(
-          messages: [...state.messages, message],
+          messages: _reconcile(message),
           status: ThreadStatus.loaded,
           isSending: false,
         ));
@@ -141,7 +250,7 @@ class ConversationCubit extends Cubit<ConversationState> {
     );
     if (result case Success(value: final m)) {
       emit(state.copyWith(
-          messages: [...state.messages, m], status: ThreadStatus.loaded));
+          messages: _reconcile(m), status: ThreadStatus.loaded));
     }
     return result;
   }
@@ -155,7 +264,7 @@ class ConversationCubit extends Cubit<ConversationState> {
     );
     if (result case Success(value: final m)) {
       emit(state.copyWith(
-          messages: [...state.messages, m], status: ThreadStatus.loaded));
+          messages: _reconcile(m), status: ThreadStatus.loaded));
     }
     return result;
   }
@@ -180,6 +289,24 @@ class ConversationCubit extends Cubit<ConversationState> {
             if (m.id == messageId) updated else m,
         ],
       ));
+    }
+    return result;
+  }
+
+  /// Stars / unstars a message (optimistic; reverts on failure).
+  Future<Result<void>> toggleStar(ChatMessage msg) async {
+    final target = !msg.isStarred;
+    emit(state.copyWith(messages: [
+      for (final m in state.messages)
+        if (m.id == msg.id) m.copyWith(isStarred: target) else m,
+    ]));
+    final result = await _repository
+        .starMessage(conversation.id, msg.id, star: target);
+    if (!result.isSuccess) {
+      emit(state.copyWith(messages: [
+        for (final m in state.messages)
+          if (m.id == msg.id) m.copyWith(isStarred: !target) else m,
+      ]));
     }
     return result;
   }

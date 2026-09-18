@@ -42,8 +42,10 @@ class ApiEndpoints {
   static const String businesses = '/businesses';
   static String businessBoost(Object id) => '/businesses/$id/boost';
 
-  // Orders (create only in the current docs; settled in credits).
+  // Orders — shared buy/sell records settled in credits.
   static const String orders = '/orders';
+  static String order(int id) => '/orders/$id';
+  static String orderPay(int id) => '/orders/$id/pay';
 
   // Offers
   static const String offers = '/offers';
@@ -65,6 +67,10 @@ class ApiEndpoints {
   static String conversationMessage(Object id, Object msgId) =>
       '/conversations/$id/messages/$msgId';
   static String conversationRead(Object id) => '/conversations/$id/read';
+  static String conversationMessageStar(Object id, Object msgId) =>
+      '/conversations/$id/messages/$msgId/star';
+  static String conversationPin(Object id) => '/conversations/$id/pin';
+  static const String messagesStarred = '/messages/starred';
 
   // Groups
   static const String groupsRecommended = '/groups/recommended';

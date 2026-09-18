@@ -114,6 +114,8 @@ void main() {
       repo = _MockChatRepo();
       // Labels are fetched on load(); default to none unless a test overrides it.
       when(() => repo.getLabels()).thenAnswer((_) async => const Success([]));
+      // "All" merges questions too; default to none unless a test overrides it.
+      when(() => repo.getQuestions()).thenAnswer((_) async => const Success([]));
     });
 
     test('all merges chats + broadcasts, newest first', () async {
@@ -171,8 +173,10 @@ void main() {
       expect(cubit.state.status, ChatListStatus.empty);
     });
 
-    test('all: error only when both fail', () async {
+    test('all: error only when every source fails', () async {
       when(() => repo.getChats())
+          .thenAnswer((_) async => const Err(NetworkFailure()));
+      when(() => repo.getQuestions())
           .thenAnswer((_) async => const Err(NetworkFailure()));
       when(() => repo.getBroadcasts())
           .thenAnswer((_) async => const Err(NetworkFailure()));

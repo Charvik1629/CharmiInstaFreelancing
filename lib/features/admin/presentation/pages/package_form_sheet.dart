@@ -106,7 +106,7 @@ class _PackageFormSheetState extends State<PackageFormSheet> {
                 builder: (field) => AppTextField(
                   controller: _name,
                   label: 'Name',
-                  hint: 'Starter',
+                  hint: 'Enter package name',
                   onChanged: field.didChange,
                   errorText: field.errorText,
                 ),
@@ -119,7 +119,7 @@ class _PackageFormSheetState extends State<PackageFormSheet> {
                     child: _intField(
                       _credits,
                       'Credits',
-                      hint: '50',
+                      hint: 'Enter credits',
                       min: 1,
                     ),
                   ),
@@ -128,14 +128,14 @@ class _PackageFormSheetState extends State<PackageFormSheet> {
                     child: _intField(
                       _rupees,
                       'Price (₹)',
-                      hint: '49',
+                      hint: 'Enter amount',
                       min: 1,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
-              _intField(_sortOrder, 'Sort order', hint: '1', min: 0),
+              _intField(_sortOrder, 'Sort order', hint: 'Enter sort order', min: 0),
               const SizedBox(height: AppSpacing.sm),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

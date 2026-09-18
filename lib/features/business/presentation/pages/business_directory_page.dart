@@ -51,9 +51,15 @@ class _DirectoryView extends StatelessWidget {
                   child: TextField(
                     onChanged: (v) =>
                         context.read<BusinessDirectoryCubit>().onQueryChanged(v),
+                    // The pill container is the field's surface, so strip the
+                    // theme's fill + focus border (else a box-in-a-box).
                     decoration: const InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
                       hintText: 'Search products, tags, business…',
                     ),
                   ),

@@ -8,6 +8,8 @@ class User extends Equatable {
   const User({
     required this.id,
     required this.name,
+    this.username,
+    this.shareUrl,
     this.email,
     this.avatarUrl,
     this.bio,
@@ -25,6 +27,13 @@ class User extends Equatable {
 
   final int id;
   final String name;
+
+  /// Public handle (e.g. `bob`) — used for the profile deep link / share URL.
+  final String? username;
+
+  /// Canonical shareable profile URL (server-provided `share_url`).
+  final String? shareUrl;
+
   final String? email;
   final String? avatarUrl;
   final String? bio;
@@ -59,6 +68,8 @@ class User extends Equatable {
   factory User.fromJson(Map<String, dynamic> json) => User(
         id: json.asIntOr('id', 0),
         name: json.asStringOr('name', ''),
+        username: json.asString('username'),
+        shareUrl: json.asString('share_url'),
         email: json.asString('email'),
         avatarUrl: json.asString('avatar_url'),
         bio: json.asString('bio'),
@@ -77,6 +88,8 @@ class User extends Equatable {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'username': username,
+        'share_url': shareUrl,
         'email': email,
         'avatar_url': avatarUrl,
         'bio': bio,
@@ -94,6 +107,8 @@ class User extends Equatable {
 
   User copyWith({
     String? name,
+    String? username,
+    String? shareUrl,
     String? email,
     String? avatarUrl,
     String? bio,
@@ -111,6 +126,8 @@ class User extends Equatable {
     return User(
       id: id,
       name: name ?? this.name,
+      username: username ?? this.username,
+      shareUrl: shareUrl ?? this.shareUrl,
       email: email ?? this.email,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
@@ -131,6 +148,8 @@ class User extends Equatable {
   List<Object?> get props => [
         id,
         name,
+        username,
+        shareUrl,
         email,
         avatarUrl,
         bio,

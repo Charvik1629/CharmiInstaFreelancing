@@ -100,7 +100,7 @@ class _LabelFormSheetState extends State<LabelFormSheet> {
               builder: (field) => AppTextField(
                 controller: _name,
                 label: 'Name',
-                hint: 'Clients',
+                hint: 'Enter label name',
                 onChanged: field.didChange,
                 errorText: field.errorText,
               ),
@@ -135,7 +135,7 @@ class _LabelFormSheetState extends State<LabelFormSheet> {
               builder: (field) => AppTextField(
                 controller: _sortOrder,
                 label: 'Sort order',
-                hint: '0',
+                hint: 'Enter sort order',
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onChanged: field.didChange,

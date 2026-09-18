@@ -4,6 +4,10 @@ import '../../../../core/network/api_response.dart';
 import '../domain/entities/order.dart';
 
 abstract class OrdersRemoteDataSource {
+  Future<List<AppOrder>> listOrders({String? status});
+  Future<AppOrder> getOrder(int id);
+  Future<AppOrder> payOrder(int id);
+  Future<AppOrder> updateOrderStatus(int id, String status, {String? notes});
   Future<AppOrder> createOrder({
     int? loadId,
     int? conversationId,
@@ -18,6 +22,38 @@ class OrdersRemoteDataSourceImpl implements OrdersRemoteDataSource {
   OrdersRemoteDataSourceImpl(this._client);
 
   final ApiClient _client;
+
+  @override
+  Future<List<AppOrder>> listOrders({String? status}) async {
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.orders,
+      query: {'status': ?status, 'per_page': 50},
+    );
+    return ApiEnvelope.list(res.data, AppOrder.fromJson).items;
+  }
+
+  @override
+  Future<AppOrder> getOrder(int id) async {
+    final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.order(id));
+    return ApiEnvelope.object(res.data, AppOrder.fromJson);
+  }
+
+  @override
+  Future<AppOrder> payOrder(int id) async {
+    final res =
+        await _client.post<Map<String, dynamic>>(ApiEndpoints.orderPay(id));
+    return ApiEnvelope.object(res.data, AppOrder.fromJson);
+  }
+
+  @override
+  Future<AppOrder> updateOrderStatus(int id, String status,
+      {String? notes}) async {
+    final res = await _client.patch<Map<String, dynamic>>(
+      ApiEndpoints.order(id),
+      data: {'status': status, 'notes': ?notes},
+    );
+    return ApiEnvelope.object(res.data, AppOrder.fromJson);
+  }
 
   @override
   Future<AppOrder> createOrder({

@@ -7,6 +7,39 @@ import 'post_type.dart';
 /// Media attached to a load. [kind] is `image` or `file` (e.g. a PDF).
 enum MediaKind { image, file, none }
 
+MediaKind mediaKindFromString(String? raw) => switch (raw) {
+      'image' => MediaKind.image,
+      'file' => MediaKind.file,
+      _ => MediaKind.none,
+    };
+
+/// One item in a load's `media[]` carousel.
+class LoadMedia extends Equatable {
+  const LoadMedia({
+    required this.url,
+    this.mime,
+    this.kind = MediaKind.image,
+    this.sortOrder = 0,
+  });
+
+  final String url;
+  final String? mime;
+  final MediaKind kind;
+  final int sortOrder;
+
+  bool get isImage => kind == MediaKind.image;
+
+  factory LoadMedia.fromJson(Map<String, dynamic> json) => LoadMedia(
+        url: json.asStringOr('url', ''),
+        mime: json.asString('mime'),
+        kind: mediaKindFromString(json.asString('kind')),
+        sortOrder: json.asIntOr('sort_order', 0),
+      );
+
+  @override
+  List<Object?> get props => [url, mime, kind, sortOrder];
+}
+
 /// A feed post (the API calls this a "load"). Carries Instagram-style display
 /// fields plus per-viewer capability flags that drive which actions the card
 /// shows (request, ask, offer, report, edit, delete).
@@ -18,6 +51,7 @@ class Load extends Equatable {
     this.mediaUrl,
     this.mediaMime,
     this.mediaKind = MediaKind.none,
+    this.media = const [],
     this.status = 'active',
     this.isBoosted = false,
     this.isBusiness = false,
@@ -42,6 +76,11 @@ class Load extends Equatable {
   final String? mediaUrl;
   final String? mediaMime;
   final MediaKind mediaKind;
+
+  /// Full media carousel (`media[]`). Falls back to a single item built from
+  /// [mediaUrl] when the server only sends the legacy cover fields.
+  final List<LoadMedia> media;
+
   final String status;
   final bool isBoosted;
   final bool isBusiness;
@@ -64,6 +103,10 @@ class Load extends Equatable {
   bool get hasImage => mediaKind == MediaKind.image && (mediaUrl?.isNotEmpty ?? false);
   bool get hasFile => mediaKind == MediaKind.file && (mediaUrl?.isNotEmpty ?? false);
 
+  /// Just the image items of the carousel, in order (drives the feed pager).
+  List<LoadMedia> get imageMedia =>
+      media.where((m) => m.isImage && m.url.isNotEmpty).toList();
+
   factory Load.fromJson(Map<String, dynamic> json) {
     return Load(
       id: json.asIntOr('id', 0),
@@ -72,6 +115,7 @@ class Load extends Equatable {
       mediaUrl: json.asString('media_url'),
       mediaMime: json.asString('media_mime'),
       mediaKind: _kind(json.asString('media_kind')),
+      media: _parseMedia(json),
       status: json.asStringOr('status', 'active'),
       isBoosted: json.asBool('is_boosted'),
       isBusiness: json.asBool('is_business'),
@@ -95,11 +139,33 @@ class Load extends Equatable {
     );
   }
 
-  static MediaKind _kind(String? raw) => switch (raw) {
-        'image' => MediaKind.image,
-        'file' => MediaKind.file,
-        _ => MediaKind.none,
-      };
+  static MediaKind _kind(String? raw) => mediaKindFromString(raw);
+
+  /// Reads the `media[]` array; falls back to a single item synthesized from the
+  /// legacy `media_url`/`media_mime`/`media_kind` cover fields.
+  static List<LoadMedia> _parseMedia(Map<String, dynamic> json) {
+    final raw = json['media'];
+    if (raw is List && raw.isNotEmpty) {
+      final items = raw
+          .whereType<Map>()
+          .map((m) => LoadMedia.fromJson(Map<String, dynamic>.from(m)))
+          .where((m) => m.url.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      if (items.isNotEmpty) return items;
+    }
+    final url = json.asString('media_url');
+    if (url != null && url.isNotEmpty) {
+      return [
+        LoadMedia(
+          url: url,
+          mime: json.asString('media_mime'),
+          kind: mediaKindFromString(json.asString('media_kind')),
+        ),
+      ];
+    }
+    return const [];
+  }
 
   Load copyWith({
     bool? viewerHasRequested,
@@ -115,6 +181,7 @@ class Load extends Equatable {
       mediaUrl: mediaUrl,
       mediaMime: mediaMime,
       mediaKind: mediaKind,
+      media: media,
       status: status ?? this.status,
       isBoosted: isBoosted ?? this.isBoosted,
       isBusiness: isBusiness,
@@ -136,7 +203,7 @@ class Load extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, title, body, mediaUrl, mediaKind, status, isBoosted, isBusiness,
+        id, title, body, mediaUrl, mediaKind, media, status, isBoosted, isBusiness,
         postType, author, isOwn, canMessage, viewerHasRequested, conversationId,
       ];
 }

@@ -1,33 +1,81 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../domain/entities/order.dart';
+import '../../domain/orders_repository.dart';
+import '../widgets/order_status_pill.dart';
 
-/// Order details (design "Order Details", HTML 4603). Renders a real [AppOrder]
-/// passed via route `extra` (from creation). Amount is shown in credits — the
-/// API settles orders in credits, not cash. A "Pay" action awaits a backend pay
-/// endpoint (not in the current docs).
-class OrderDetailPage extends StatelessWidget {
+/// Order details (design "Order Details"). Renders a real [AppOrder] passed via
+/// route `extra`, and lets the buyer pay (wallet credits) or either party
+/// confirm / cancel / complete — all wired to the live `/orders` endpoints.
+class OrderDetailPage extends StatefulWidget {
   const OrderDetailPage({super.key, this.order});
 
   final AppOrder? order;
 
   @override
+  State<OrderDetailPage> createState() => _OrderDetailPageState();
+}
+
+class _OrderDetailPageState extends State<OrderDetailPage> {
+  late AppOrder? _order = widget.order;
+  bool _busy = false;
+
+  int? get _meId => context.read<AuthCubit>().state.user?.id;
+
+  Future<void> _run(Future<Result<AppOrder>> future) async {
+    setState(() => _busy = true);
+    final result = await future;
+    if (!mounted) return;
+    setState(() => _busy = false);
+    switch (result) {
+      case Success(value: final updated):
+        setState(() => _order = updated);
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
+
+  Future<void> _pay(AppOrder o) async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: 'Pay ${o.amountCredits} credits?',
+      message: 'This debits your wallet and credits the seller.',
+      confirmLabel: 'Pay',
+    );
+    if (ok) await _run(sl<OrdersRepository>().payOrder(o.id));
+  }
+
+  Future<void> _status(AppOrder o, String status, String confirmLabel,
+      String message) async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: '$confirmLabel?',
+      message: message,
+      confirmLabel: confirmLabel,
+      destructive: status == 'cancelled',
+    );
+    if (ok) await _run(sl<OrdersRepository>().updateOrderStatus(o.id, status));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final nex = context.nexveero;
     final texts = Theme.of(context).textTheme;
-    final o = order;
+    final o = _order;
     return Scaffold(
       appBar: AppBar(title: const Text('Order details')),
       body: o == null
           ? const EmptyView(
               title: 'Order not found',
-              subtitle:
-                  'Open an order from a chat. A shareable order list arrives once '
-                  'the backend exposes GET /orders.',
+              subtitle: 'Open an order from the Orders list or a chat.',
               icon: Icons.receipt_long_outlined,
             )
           : ListView(
@@ -37,10 +85,9 @@ class OrderDetailPage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(o.number ?? 'ORD-—',
-                        style: texts.bodySmall?.copyWith(
-                            color: nex.textSecondary,
-                            fontFeatures: const [])),
-                    _StatusPill(status: o.status),
+                        style: texts.bodySmall
+                            ?.copyWith(color: nex.textSecondary)),
+                    OrderStatusPill(status: o.status),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -62,6 +109,12 @@ class OrderDetailPage extends StatelessWidget {
                 _Card(
                   child: Column(
                     children: [
+                      if (o.counterparty(_meId) != null)
+                        _Line(
+                            label: o.buyer?.id == _meId ? 'Seller' : 'Buyer',
+                            value: o.counterparty(_meId)!.displayName),
+                      if (o.counterparty(_meId) != null)
+                        const Divider(height: AppSpacing.xl),
                       _Line(label: 'Amount', value: '${o.amountCredits} credits'),
                       const Divider(height: AppSpacing.xl),
                       _Line(
@@ -79,49 +132,58 @@ class OrderDetailPage extends StatelessWidget {
                           ?.copyWith(color: nex.textSecondary)),
                 ],
                 const SizedBox(height: AppSpacing.xl),
-                if (o.status == 'pending')
-                  AppButton(
-                    label: 'Pay ${o.amountCredits} credits',
-                    icon: Icons.lock_outline,
-                    onPressed: () => AppOverlays.snack(context,
-                        'Order payment is settled by the backend once its pay endpoint is live.'),
-                  ),
+                ..._actions(o),
               ],
             ),
     );
   }
-}
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final nex = context.nexveero;
-    final (color, label) = switch (status) {
-      'paid' || 'completed' => (nex.success, 'Paid'),
-      'in_progress' => (nex.info, 'In progress'),
-      'cancelled' => (Theme.of(context).colorScheme.error, 'Cancelled'),
-      _ => (nex.warning, 'Awaiting payment'),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 5),
-        Text(label,
-            style: TextStyle(
-                color: color, fontSize: 11, fontWeight: FontWeight.w700)),
-      ]),
-    );
+  List<Widget> _actions(AppOrder o) {
+    final me = _meId;
+    final widgets = <Widget>[];
+    if (o.canPay(me)) {
+      widgets.add(AppButton(
+        label: 'Pay ${o.amountCredits} credits',
+        icon: Icons.lock_outline,
+        isLoading: _busy,
+        onPressed: () => _pay(o),
+      ));
+    }
+    if (o.canConfirm(me)) {
+      widgets.add(AppButton(
+        label: 'Confirm order',
+        icon: Icons.check_circle_outline,
+        isLoading: _busy,
+        onPressed: () => _status(o, 'confirmed', 'Confirm',
+            'Confirm this order so the buyer can pay.'),
+      ));
+    }
+    if (o.canComplete(me)) {
+      widgets.add(AppButton(
+        label: 'Mark completed',
+        icon: Icons.done_all,
+        variant: AppButtonVariant.tonal,
+        isLoading: _busy,
+        onPressed: () => _status(
+            o, 'completed', 'Complete', 'Mark this order as completed.'),
+      ));
+    }
+    if (o.canCancel(me)) {
+      widgets.add(AppButton(
+        label: 'Cancel order',
+        variant: AppButtonVariant.outline,
+        isLoading: _busy,
+        onPressed: () => _status(
+            o, 'cancelled', 'Cancel order', 'This cancels the order.'),
+      ));
+    }
+    // Space the action buttons evenly.
+    return [
+      for (var i = 0; i < widgets.length; i++) ...[
+        if (i > 0) const SizedBox(height: AppSpacing.sm),
+        widgets[i],
+      ],
+    ];
   }
 }
 

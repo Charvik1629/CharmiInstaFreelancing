@@ -85,7 +85,7 @@ class _SecurityViewState extends State<_SecurityView> {
                 AppTextField(
                   controller: _pin,
                   label: 'Enter 4-digit PIN',
-                  hint: '••••',
+                  hint: 'Enter PIN',
                   keyboardType: TextInputType.number,
                   maxLength: 4,
                   obscure: true,

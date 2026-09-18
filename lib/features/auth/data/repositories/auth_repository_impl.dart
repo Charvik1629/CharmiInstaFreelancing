@@ -18,11 +18,11 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
 
   @override
   Future<Result<AuthSession>> login({
-    required String email,
+    required String identifier,
     required String password,
   }) async {
     final result = await guard(
-      () => _remote.login(email: email, password: password),
+      () => _remote.login(identifier: identifier, password: password),
     );
     await _persistOnSuccess(result);
     return result;
@@ -31,6 +31,7 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
   @override
   Future<Result<User>> register({
     required String name,
+    required String username,
     required String businessName,
     required String phone,
     required String email,
@@ -45,6 +46,7 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
     return guard(
       () => _remote.register(
         name: name,
+        username: username,
         businessName: businessName,
         phone: phone,
         email: email,

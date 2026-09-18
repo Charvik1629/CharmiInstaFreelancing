@@ -65,8 +65,13 @@ class CreatePostCubit extends Cubit<CreatePostState> {
 
   void setTags(List<Tag> tags) => emit(state.copyWith(selectedTags: tags));
 
-  void addImage(String path) =>
-      emit(state.copyWith(imagePaths: [...state.imagePaths, path]));
+  /// Max media per post — matches the `media[]` limit on POST /loads.
+  static const maxImages = 10;
+
+  void addImage(String path) {
+    if (state.imagePaths.length >= maxImages) return;
+    emit(state.copyWith(imagePaths: [...state.imagePaths, path]));
+  }
 
   void removeImageAt(int index) {
     if (index < 0 || index >= state.imagePaths.length) return;
@@ -96,7 +101,7 @@ class CreatePostCubit extends Cubit<CreatePostState> {
       title: state.title.trim(),
       body: state.body.trim().isEmpty ? null : state.body.trim(),
       postTypeId: state.selectedTypeId,
-      imagePath: state.coverImagePath,
+      imagePaths: state.imagePaths,
       tagIds: state.selectedTags.map((t) => t.id).toList(),
     );
     final result = _editLoadId != null

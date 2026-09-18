@@ -58,8 +58,10 @@ class _ThreadViewState extends State<_ThreadView> {
   void initState() {
     super.initState();
     _scroll.addListener(() {
-      // Older messages page in when scrolled to the top.
-      if (_scroll.position.pixels <= 40) {
+      // The list is reversed (newest at the bottom), so older messages page in
+      // when scrolled up toward the top — i.e. near the max scroll extent.
+      if (_scroll.hasClients &&
+          _scroll.position.pixels >= _scroll.position.maxScrollExtent - 40) {
         context.read<ConversationCubit>().loadMore();
       }
     });
@@ -165,7 +167,7 @@ class _ThreadViewState extends State<_ThreadView> {
             children: [
               Text('Share location', style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: AppSpacing.lg),
-              AppTextField(controller: label, label: 'Place', hint: 'e.g. Warehouse'),
+              AppTextField(controller: label, label: 'Place', hint: 'Enter place'),
               const SizedBox(height: AppSpacing.md),
               Row(children: [
                 Expanded(
@@ -269,29 +271,45 @@ class _ThreadViewState extends State<_ThreadView> {
   /// Long-press actions on the user's own message: edit (text) / delete.
   /// The server enforces the ≤1h edit and ≤24h delete windows.
   Future<void> _messageActions(ChatMessage msg) async {
+    final mine = msg.isMine(widget.meId);
     final action = await AppOverlays.sheet<String>(
       context,
       builder: (sheetCtx) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if ((msg.body ?? '').isNotEmpty && !msg.hasImage && !msg.hasFileAttachment)
+          ListTile(
+            leading: Icon(msg.isStarred ? Icons.star : Icons.star_border),
+            title: Text(msg.isStarred ? 'Unstar' : 'Star'),
+            onTap: () => Navigator.of(sheetCtx).pop('star'),
+          ),
+          if (mine &&
+              (msg.body ?? '').isNotEmpty &&
+              !msg.hasImage &&
+              !msg.hasFileAttachment)
             ListTile(
               leading: const Icon(Icons.edit_outlined),
               title: const Text('Edit'),
               onTap: () => Navigator.of(sheetCtx).pop('edit'),
             ),
-          ListTile(
-            leading: Icon(Icons.delete_outline,
-                color: Theme.of(sheetCtx).colorScheme.error),
-            title: Text('Delete',
-                style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error)),
-            onTap: () => Navigator.of(sheetCtx).pop('delete'),
-          ),
+          if (mine)
+            ListTile(
+              leading: Icon(Icons.delete_outline,
+                  color: Theme.of(sheetCtx).colorScheme.error),
+              title: Text('Delete',
+                  style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error)),
+              onTap: () => Navigator.of(sheetCtx).pop('delete'),
+            ),
         ],
       ),
     );
     if (action == null || !mounted) return;
-    if (action == 'edit') {
+    if (action == 'star') {
+      final result = await context.read<ConversationCubit>().toggleStar(msg);
+      if (mounted && !result.isSuccess) {
+        AppOverlays.snack(context,
+            result.failureOrNull?.message ?? 'Could not update star');
+      }
+    } else if (action == 'edit') {
       await _editMessage(msg);
     } else if (action == 'delete') {
       final result = await context.read<ConversationCubit>().deleteMessage(msg.id);
@@ -320,7 +338,7 @@ class _ThreadViewState extends State<_ThreadView> {
               const SizedBox(height: AppSpacing.lg),
               AppTextField(
                 controller: controller,
-                hint: 'Message',
+                hint: 'Enter message',
                 maxLines: 4,
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -443,12 +461,38 @@ class _ThreadViewState extends State<_ThreadView> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium),
-                  if (subtitle != null)
-                    Text(subtitle,
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(color: context.nexveero.textSecondary)),
+                  // Live subtitle: typing… › Online › last seen › static label.
+                  BlocBuilder<ConversationCubit, ConversationState>(
+                    buildWhen: (p, c) =>
+                        p.typingName != c.typingName ||
+                        p.peerOnline != c.peerOnline ||
+                        p.peerLastSeen != c.peerLastSeen,
+                    builder: (context, s) {
+                      String? line;
+                      Color? color;
+                      if (s.typingName != null) {
+                        line = 'typing…';
+                        color = Theme.of(context).colorScheme.primary;
+                      } else if (c.type == ConversationType.direct &&
+                          s.peerOnline) {
+                        line = 'Online';
+                        color = context.nexveero.success;
+                      } else if (c.type == ConversationType.direct &&
+                          s.peerLastSeen != null) {
+                        line = 'last seen ${s.peerLastSeen!.timeAgo}';
+                        color = context.nexveero.textSecondary;
+                      } else {
+                        line = subtitle;
+                        color = context.nexveero.textSecondary;
+                      }
+                      if (line == null) return const SizedBox.shrink();
+                      return Text(line,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: color));
+                    },
+                  ),
                 ],
               ),
             ),
@@ -477,12 +521,20 @@ class _ThreadViewState extends State<_ThreadView> {
                       icon: Icons.chat_bubble_outline,
                     );
                   case ThreadStatus.loaded:
+                    // Interleave day separators (design/web: "Today").
+                    final items = _chatItems(state.messages);
+                    final count = items.length;
                     return ListView.builder(
                       controller: _scroll,
+                      // Reversed so the newest message sits at the bottom and the
+                      // view stays pinned there when the keyboard opens.
+                      reverse: true,
                       padding: const EdgeInsets.all(AppSpacing.lg),
-                      itemCount: state.messages.length + (state.isLoadingMore ? 1 : 0),
+                      itemCount: count + (state.isLoadingMore ? 1 : 0),
                       itemBuilder: (context, i) {
-                        if (state.isLoadingMore && i == 0) {
+                        // The loader for older messages sits at the very top,
+                        // which in a reversed list is the last builder index.
+                        if (state.isLoadingMore && i == count) {
                           return const Padding(
                             padding: EdgeInsets.all(AppSpacing.sm),
                             child: Center(
@@ -492,16 +544,26 @@ class _ThreadViewState extends State<_ThreadView> {
                                     child: CircularProgressIndicator(strokeWidth: 2))),
                           );
                         }
-                        final index = state.isLoadingMore ? i - 1 : i;
-                        final msg = state.messages[index];
+                        // index 0 → newest (bottom); higher indices → older.
+                        final item = items[count - 1 - i];
+                        if (item is _DateItem) {
+                          return _DateSeparator(date: item.date);
+                        }
+                        final msg = (item as _MsgItem).message;
+                        // Server event lines render as a centered banner.
+                        if (msg.isSystem) return _SystemLine(text: msg.body ?? '');
                         final mine = msg.isMine(widget.meId);
                         return GestureDetector(
-                          onLongPress: (mine && !msg.isOrder)
+                          onLongPress: (!msg.isOrder && !msg.isSystem)
                               ? () => _messageActions(msg)
                               : null,
                           child: _Bubble(
                             message: msg,
                             mine: mine,
+                            readByPeer: mine &&
+                                state.peerLastReadAt != null &&
+                                msg.createdAt != null &&
+                                !msg.createdAt!.isAfter(state.peerLastReadAt!),
                             showSender:
                                 widget.conversation.type == ConversationType.group,
                           ),
@@ -526,11 +588,16 @@ class _ThreadViewState extends State<_ThreadView> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine, required this.showSender});
+  const _Bubble(
+      {required this.message,
+      required this.mine,
+      required this.showSender,
+      this.readByPeer = false});
 
   final ChatMessage message;
   final bool mine;
   final bool showSender;
+  final bool readByPeer;
 
   @override
   Widget build(BuildContext context) {
@@ -582,11 +649,29 @@ class _Bubble extends StatelessWidget {
             Text(message.body!,
                 style: TextStyle(color: mine ? Colors.white : null)),
           const SizedBox(height: 2),
-          Text(
-            message.createdAt?.timeAgo ?? '',
-            style: TextStyle(
-                fontSize: 10,
-                color: mine ? Colors.white70 : context.nexveero.textSecondary),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (message.isStarred) ...[
+                Icon(Icons.star,
+                    size: 11,
+                    color: mine ? Colors.white70 : context.nexveero.warning),
+                const SizedBox(width: 3),
+              ],
+              Text(
+                message.createdAt?.timeAgo ?? '',
+                style: TextStyle(
+                    fontSize: 10,
+                    color:
+                        mine ? Colors.white70 : context.nexveero.textSecondary),
+              ),
+              if (mine) ...[
+                const SizedBox(width: 3),
+                Icon(readByPeer ? Icons.done_all : Icons.done,
+                    size: 13,
+                    color: readByPeer ? Colors.white : Colors.white70),
+              ],
+            ],
           ),
         ],
       ),
@@ -809,13 +894,21 @@ class _Composer extends StatelessWidget {
                         minLines: 1,
                         maxLines: 4,
                         textInputAction: TextInputAction.send,
+                        onChanged: (_) =>
+                            context.read<ConversationCubit>().notifyTyping(),
                         onSubmitted: (_) => onSend(),
+                        // The pill container is the field's surface, so strip
+                        // the theme's fill + focus border (else a box-in-a-box).
                         decoration: InputDecoration(
                           isDense: true,
+                          filled: false,
                           hintText: conversation.isBroadcast
                               ? 'Message all recipients…'
                               : 'Message…',
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                       ),
                     ),
@@ -850,6 +943,101 @@ class _Composer extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One rendered row in the thread: a day separator or a message.
+sealed class _ChatItem {}
+
+class _DateItem extends _ChatItem {
+  _DateItem(this.date);
+  final DateTime date;
+}
+
+class _MsgItem extends _ChatItem {
+  _MsgItem(this.message);
+  final ChatMessage message;
+}
+
+/// Groups messages by calendar day, inserting a [_DateItem] before the first
+/// message of each day (chronological order).
+List<_ChatItem> _chatItems(List<ChatMessage> messages) {
+  final items = <_ChatItem>[];
+  DateTime? lastDay;
+  for (final m in messages) {
+    final d = m.createdAt;
+    if (d != null) {
+      final day = DateTime(d.year, d.month, d.day);
+      if (lastDay == null || day != lastDay) {
+        items.add(_DateItem(day));
+        lastDay = day;
+      }
+    }
+    items.add(_MsgItem(m));
+  }
+  return items;
+}
+
+/// A centered "Today" / "Yesterday" / date chip between message groups.
+class _DateSeparator extends StatelessWidget {
+  const _DateSeparator({required this.date});
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 3),
+        decoration: BoxDecoration(
+          color: context.nexveero.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+        ),
+        child: Text(_label(date),
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: context.nexveero.textSecondary)),
+      ),
+    );
+  }
+
+  String _label(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(d.year, d.month, d.day);
+    final diff = today.difference(that).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return '${d.day}/${d.month}/${d.year}';
+  }
+}
+
+/// A server event line ("X requested load …", "Y made an offer …").
+class _SystemLine extends StatelessWidget {
+  const _SystemLine({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.nexveero.warning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: context.nexveero.textSecondary)),
       ),
     );
   }

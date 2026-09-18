@@ -108,7 +108,7 @@ class _PlanFormSheetState extends State<PlanFormSheet> {
                 builder: (field) => AppTextField(
                   controller: _name,
                   label: 'Name',
-                  hint: 'Monthly',
+                  hint: 'Enter plan name',
                   onChanged: field.didChange,
                   errorText: field.errorText,
                 ),
@@ -117,7 +117,7 @@ class _PlanFormSheetState extends State<PlanFormSheet> {
               AppTextField(
                 controller: _description,
                 label: 'Description',
-                hint: 'Access for 30 days.',
+                hint: 'Enter description',
                 maxLines: 2,
               ),
               const SizedBox(height: AppSpacing.md),
@@ -128,7 +128,7 @@ class _PlanFormSheetState extends State<PlanFormSheet> {
                     child: _NumberField(
                       controller: _duration,
                       label: 'Duration (days)',
-                      hint: '30',
+                      hint: 'Enter duration in days',
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
@@ -136,7 +136,7 @@ class _PlanFormSheetState extends State<PlanFormSheet> {
                     child: _NumberField(
                       controller: _sortOrder,
                       label: 'Sort order',
-                      hint: '1',
+                      hint: 'Enter sort order',
                     ),
                   ),
                 ],

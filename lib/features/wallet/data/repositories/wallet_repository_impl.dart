@@ -53,17 +53,17 @@ class WalletRepositoryImpl with BaseRepository implements WalletRepository {
 
   @override
   Future<Result<int>> verifyIap({
-    required int creditPackageId,
     required String platform,
-    required String receipt,
-    String? productId,
+    required String productId,
+    String? receiptData,
+    String? purchaseToken,
     String? transactionId,
   }) =>
       guard(() => _remote.verifyIap(
-            creditPackageId: creditPackageId,
             platform: platform,
-            receipt: receipt,
             productId: productId,
+            receiptData: receiptData,
+            purchaseToken: purchaseToken,
             transactionId: transactionId,
           ));
 }

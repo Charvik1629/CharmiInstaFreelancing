@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
@@ -72,8 +73,7 @@ class _ProfileBody extends StatelessWidget {
               icon: Icons.ios_share,
               variant: AppButtonVariant.outline,
               expanded: false,
-              onPressed: () => AppOverlays.snack(
-                  context, 'Sharing your profile arrives with the Share module.'),
+              onPressed: () => _shareProfile(context, user),
             ),
           ],
         ),
@@ -84,6 +84,19 @@ class _ProfileBody extends StatelessWidget {
           const _AdminMenu(),
         ],
       ],
+    );
+  }
+
+  /// Opens the system share sheet with the profile link.
+  Future<void> _shareProfile(BuildContext context, User user) async {
+    final link = user.shareUrl ??
+        (user.username != null ? 'https://nexveero.com/u/${user.username}' : null);
+    if (link == null) {
+      AppOverlays.snack(context, 'No profile link available yet.');
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(text: '${user.name} on Nexveero\n$link'),
     );
   }
 }

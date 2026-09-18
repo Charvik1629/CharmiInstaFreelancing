@@ -61,7 +61,12 @@ class PostCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
-          if (load.hasImage) _Media(url: load.mediaUrl!) else if (load.hasFile) _FileChip(load: load),
+          if (load.imageMedia.isNotEmpty)
+            _MediaCarousel(items: load.imageMedia)
+          else if (load.hasImage)
+            _Media(url: load.mediaUrl!)
+          else if (load.hasFile)
+            _FileChip(load: load),
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
@@ -352,16 +357,89 @@ class _Media extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // media_url is server-relative; resolve against the configured base host.
+    return AspectRatio(aspectRatio: 4 / 3, child: _NetworkCover(url: url));
+  }
+}
+
+/// A single cover image filling its parent (no aspect ratio of its own — the
+/// caller sizes it). media_url is server-relative; resolved against the host.
+class _NetworkCover extends StatelessWidget {
+  const _NetworkCover({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
     final full = url.startsWith('http') ? url : '${AppConfig.current.baseUrl}$url';
+    return CachedNetworkImage(
+      imageUrl: full,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      placeholder: (_, _) => const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
+      errorWidget: (_, _, _) =>
+          const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
+    );
+  }
+}
+
+/// Instagram-style swipeable image carousel with a page counter + dots. Renders
+/// a plain image when there's only one.
+class _MediaCarousel extends StatefulWidget {
+  const _MediaCarousel({required this.items});
+  final List<LoadMedia> items;
+
+  @override
+  State<_MediaCarousel> createState() => _MediaCarouselState();
+}
+
+class _MediaCarouselState extends State<_MediaCarousel> {
+  final _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items;
+    if (items.length == 1) return _Media(url: items.first.url);
     return AspectRatio(
       aspectRatio: 4 / 3,
-      child: CachedNetworkImage(
-        imageUrl: full,
-        fit: BoxFit.cover,
-        placeholder: (_, _) => const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
-        errorWidget: (_, _, _) =>
-            const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: items.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (_, i) => _NetworkCover(url: items[i].url),
+          ),
+          // Design: elongated active pill (16×5) + small dots (5×5) at bottom.
+          Positioned(
+            bottom: 10,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: i == _index ? 16 : 5,
+                    height: 5,
+                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: i == _index ? 1 : 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -415,25 +493,13 @@ class _Actions extends StatelessWidget {
       );
     }
 
+    // Design: the feed card carries a single full-width CTA. "Request this post"
+    // when messaging is allowed; otherwise "Make an offer" for offer-only posts.
+    // (Ask / Share / Offer / Report live on the Post Detail screen.)
     final canOffer = load.canMakeOffer && onOffer != null;
     if (load.canMessage) {
-      return Row(
-        children: [
-          Expanded(
-            child: AppButton(label: 'Request this post', icon: Icons.bolt, onPressed: onRequest),
-          ),
-          if (canOffer) ...[
-            const SizedBox(width: AppSpacing.md),
-            AppButton(
-              label: 'Offer',
-              icon: Icons.local_offer_outlined,
-              variant: AppButtonVariant.outline,
-              expanded: false,
-              onPressed: onOffer,
-            ),
-          ],
-        ],
-      );
+      return AppButton(
+          label: 'Request this post', icon: Icons.bolt, onPressed: onRequest);
     }
     if (canOffer) {
       return AppButton(

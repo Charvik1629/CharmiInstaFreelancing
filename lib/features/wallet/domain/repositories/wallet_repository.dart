@@ -25,11 +25,13 @@ abstract class WalletRepository {
   Future<Result<void>> reportOutcome({required int paymentId, required String status});
 
   /// POST /wallet/iap/verify — validate a store receipt; returns new balance.
+  /// [platform] is `apple` or `google`; send [receiptData] for Apple or
+  /// [purchaseToken] for Google.
   Future<Result<int>> verifyIap({
-    required int creditPackageId,
     required String platform,
-    required String receipt,
-    String? productId,
+    required String productId,
+    String? receiptData,
+    String? purchaseToken,
     String? transactionId,
   });
 }

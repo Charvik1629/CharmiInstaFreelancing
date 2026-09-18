@@ -21,7 +21,7 @@ class MessagePage {
 /// under /chats + /conversations; broadcasts under /broadcasts.
 abstract class ChatRemoteDataSource {
   /// GET /chats — direct + group conversations (WhatsApp-style inbox).
-  Future<List<Conversation>> getChats();
+  Future<List<Conversation>> getChats({String? hasMedia, bool hasLinks});
 
   /// GET /broadcasts — the user's broadcast lists.
   Future<List<Conversation>> getBroadcasts();
@@ -53,6 +53,10 @@ abstract class ChatRemoteDataSource {
 
   /// DELETE /conversations/{id}/messages/{msgId} — delete a message (≤24h).
   Future<void> deleteMessage(int conversationId, int messageId);
+  Future<void> starMessage(int conversationId, int messageId,
+      {required bool star});
+  Future<void> pinConversation(int conversationId, {required bool pin});
+  Future<List<ChatMessage>> getStarredMessages();
 
   /// POST /conversations/{id}/messages with a location/contact meta payload.
   Future<ChatMessage> sendMeta({
@@ -102,8 +106,12 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   final ApiClient _client;
 
   @override
-  Future<List<Conversation>> getChats() async {
-    final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.chats);
+  Future<List<Conversation>> getChats(
+      {String? hasMedia, bool hasLinks = false}) async {
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.chats,
+      query: {'has_media': ?hasMedia, if (hasLinks) 'has_links': 1},
+    );
     return _list(res.data, Conversation.fromChatJson);
   }
 
@@ -185,6 +193,36 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   Future<void> deleteMessage(int conversationId, int messageId) async {
     await _client.delete<dynamic>(
         ApiEndpoints.conversationMessage(conversationId, messageId));
+  }
+
+  @override
+  Future<void> starMessage(int conversationId, int messageId,
+      {required bool star}) async {
+    final path = ApiEndpoints.conversationMessageStar(conversationId, messageId);
+    if (star) {
+      await _client.post<dynamic>(path);
+    } else {
+      await _client.delete<dynamic>(path);
+    }
+  }
+
+  @override
+  Future<List<ChatMessage>> getStarredMessages() async {
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.messagesStarred,
+      query: {'per_page': 50},
+    );
+    return _list(res.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<void> pinConversation(int conversationId, {required bool pin}) async {
+    final path = ApiEndpoints.conversationPin(conversationId);
+    if (pin) {
+      await _client.post<dynamic>(path);
+    } else {
+      await _client.delete<dynamic>(path);
+    }
   }
 
   @override

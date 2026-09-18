@@ -34,7 +34,7 @@ class _BroadcastDetailPageState extends State<BroadcastDetailPage> {
     final newName = await AppOverlays.prompt(
       context,
       title: 'Rename list',
-      hint: 'List name',
+      hint: 'Enter list name',
       initialValue: _name ?? widget.initialName,
       confirmLabel: 'Save',
     );

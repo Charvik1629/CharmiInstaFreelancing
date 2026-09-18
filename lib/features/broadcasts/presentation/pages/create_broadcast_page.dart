@@ -121,7 +121,7 @@ class _NameField extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
       child: AppTextField(
         label: 'Broadcast name',
-        hint: 'e.g. Client Updates',
+        hint: 'Enter list name',
         prefixIcon: Icons.campaign_outlined,
         onChanged: (v) => context.read<CreateBroadcastCubit>().setName(v),
       ),

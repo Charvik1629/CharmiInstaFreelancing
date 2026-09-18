@@ -53,7 +53,8 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Delete account')),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg,
+            AppSpacing.lg + MediaQuery.paddingOf(context).bottom),
         children: [
           Container(
             width: 64,
@@ -120,7 +121,7 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
           AppTextField(
             controller: _password,
             label: 'Password',
-            hint: '••••••••',
+            hint: 'Enter password',
             obscure: true,
             prefixIcon: Icons.lock_outline,
             onChanged: (_) => setState(() {}),

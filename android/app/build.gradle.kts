@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.nexveero.app"
-    compileSdk = 37 // plugins (secure_storage, permission_handler) require 37
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

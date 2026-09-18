@@ -24,6 +24,7 @@ import '../../features/business/domain/repositories/business_directory_repositor
 import '../../features/orders/data/orders_remote_data_source.dart';
 import '../../features/orders/data/orders_repository_impl.dart';
 import '../../features/orders/domain/orders_repository.dart';
+import '../../features/orders/presentation/cubit/orders_list_cubit.dart';
 import '../../features/chat/data/datasources/chat_remote_data_source.dart';
 import '../../features/chat/data/repositories/chat_repository_impl.dart';
 import '../../features/chat/domain/repositories/chat_repository.dart';
@@ -187,12 +188,15 @@ void registerFeatureDependencies() {
     () => BusinessDirectoryRepositoryImpl(sl<BusinessDirectoryDataSource>()),
   );
 
-  // Orders (create only in current docs).
+  // Orders — list / detail / pay / status, settled in credits.
   sl.registerLazySingleton<OrdersRemoteDataSource>(
     () => OrdersRemoteDataSourceImpl(sl<ApiClient>()),
   );
   sl.registerLazySingleton<OrdersRepository>(
     () => OrdersRepositoryImpl(sl<OrdersRemoteDataSource>()),
+  );
+  sl.registerFactory<OrdersListCubit>(
+    () => OrdersListCubit(sl<OrdersRepository>()),
   );
 
   // Notifications.

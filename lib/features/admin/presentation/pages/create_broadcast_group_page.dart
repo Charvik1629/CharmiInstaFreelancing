@@ -28,12 +28,13 @@ class _CreateBroadcastGroupPageState extends State<CreateBroadcastGroupPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('New broadcast group')),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg,
+            AppSpacing.lg + MediaQuery.paddingOf(context).bottom),
         children: [
           AppTextField(
             controller: _name,
             label: 'Group name',
-            hint: 'e.g. Premium buyers',
+            hint: 'Enter group name',
             prefixIcon: Icons.groups_2_outlined,
           ),
           const SizedBox(height: AppSpacing.lg),

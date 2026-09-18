@@ -10,6 +10,23 @@ class OrdersRepositoryImpl with BaseRepository implements OrdersRepository {
   final OrdersRemoteDataSource _remote;
 
   @override
+  Future<Result<List<AppOrder>>> listOrders({String? status}) =>
+      guard(() => _remote.listOrders(status: status));
+
+  @override
+  Future<Result<AppOrder>> getOrder(int id) =>
+      guard(() => _remote.getOrder(id));
+
+  @override
+  Future<Result<AppOrder>> payOrder(int id) =>
+      guard(() => _remote.payOrder(id));
+
+  @override
+  Future<Result<AppOrder>> updateOrderStatus(int id, String status,
+          {String? notes}) =>
+      guard(() => _remote.updateOrderStatus(id, status, notes: notes));
+
+  @override
   Future<Result<AppOrder>> createOrder({
     int? loadId,
     int? conversationId,

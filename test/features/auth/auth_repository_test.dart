@@ -35,10 +35,10 @@ void main() {
   tearDown(() => AppConfig.current = original);
 
   test('login success persists token + user and returns session', () async {
-    when(() => remote.login(email: any(named: 'email'), password: any(named: 'password')))
+    when(() => remote.login(identifier: any(named: 'identifier'), password: any(named: 'password')))
         .thenAnswer((_) async => session);
 
-    final res = await repo.login(email: 'a@b.co', password: 'password');
+    final res = await repo.login(identifier: 'a@b.co', password: 'password');
 
     expect(res.isSuccess, isTrue);
     verify(() => storage.writeSecure(StorageKeys.authToken, 'tok_123')).called(1);
@@ -46,10 +46,10 @@ void main() {
   });
 
   test('login failure does not persist and returns mapped failure', () async {
-    when(() => remote.login(email: any(named: 'email'), password: any(named: 'password')))
+    when(() => remote.login(identifier: any(named: 'identifier'), password: any(named: 'password')))
         .thenThrow(const AppException('bad creds', statusCode: 422));
 
-    final res = await repo.login(email: 'a@b.co', password: 'x');
+    final res = await repo.login(identifier: 'a@b.co', password: 'x');
 
     expect(res.failureOrNull, isA<ValidationFailure>());
     verifyNever(() => storage.writeSecure(any(), any()));
@@ -65,6 +65,7 @@ void main() {
     );
     when(() => remote.register(
           name: any(named: 'name'),
+          username: any(named: 'username'),
           businessName: any(named: 'businessName'),
           phone: any(named: 'phone'),
           email: any(named: 'email'),
@@ -78,6 +79,7 @@ void main() {
 
     final res = await repo.register(
       name: 'Jane Doe',
+      username: 'jane',
       businessName: 'Doe Transport',
       phone: '9876543210',
       email: 'jane@example.com',
@@ -94,6 +96,7 @@ void main() {
   test('register maps a 422 to a ValidationFailure', () async {
     when(() => remote.register(
           name: any(named: 'name'),
+          username: any(named: 'username'),
           businessName: any(named: 'businessName'),
           phone: any(named: 'phone'),
           email: any(named: 'email'),
@@ -107,6 +110,7 @@ void main() {
 
     final res = await repo.register(
       name: 'Jane',
+      username: 'jane',
       businessName: 'Doe',
       phone: '9876543210',
       email: 'jane@example.com',

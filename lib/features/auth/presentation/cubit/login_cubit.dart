@@ -12,11 +12,13 @@ class LoginCubit extends Cubit<AuthFormState> {
 
   final AuthRepository _repository;
 
-  Future<void> submit({required String email, required String password}) async {
+  Future<void> submit(
+      {required String identifier, required String password}) async {
     if (state.isSubmitting) return;
     emit(const AuthFormState(status: FormStatus.submitting));
 
-    final result = await _repository.login(email: email, password: password);
+    final result =
+        await _repository.login(identifier: identifier, password: password);
     switch (result) {
       case Success(value: final session):
         emit(AuthFormState(status: FormStatus.success, session: session));

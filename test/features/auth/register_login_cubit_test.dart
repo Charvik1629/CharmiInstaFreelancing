@@ -27,6 +27,7 @@ void main() {
     test('success emits the pending user (no session)', () async {
       when(() => repo.register(
             name: any(named: 'name'),
+            username: any(named: 'username'),
             businessName: any(named: 'businessName'),
             phone: any(named: 'phone'),
             email: any(named: 'email'),
@@ -41,6 +42,7 @@ void main() {
       final cubit = RegisterCubit(repo);
       await cubit.submit(
         name: 'Jane',
+        username: 'jane',
         businessName: 'Doe Transport',
         phone: '9876543210',
         email: 'jane@example.com',
@@ -57,6 +59,7 @@ void main() {
     test('422 surfaces per-field errors', () async {
       when(() => repo.register(
             name: any(named: 'name'),
+            username: any(named: 'username'),
             businessName: any(named: 'businessName'),
             phone: any(named: 'phone'),
             email: any(named: 'email'),
@@ -76,6 +79,7 @@ void main() {
       final cubit = RegisterCubit(repo);
       await cubit.submit(
         name: 'Jane',
+        username: 'jane',
         businessName: 'Doe',
         phone: '9876543210',
         email: 'jane@example.com',
@@ -92,12 +96,12 @@ void main() {
   group('LoginCubit', () {
     test('403 (pending/rejected) sets the forbidden flag', () async {
       when(() => repo.login(
-              email: any(named: 'email'), password: any(named: 'password')))
+              identifier: any(named: 'identifier'), password: any(named: 'password')))
           .thenAnswer((_) async =>
               const Err(ForbiddenFailure('Your account is pending approval.')));
 
       final cubit = LoginCubit(repo);
-      await cubit.submit(email: 'a@b.co', password: 'password');
+      await cubit.submit(identifier: 'a@b.co', password: 'password');
 
       expect(cubit.state.status, FormStatus.failure);
       expect(cubit.state.forbidden, isTrue);
@@ -105,11 +109,11 @@ void main() {
 
     test('a non-403 failure does not set forbidden', () async {
       when(() => repo.login(
-              email: any(named: 'email'), password: any(named: 'password')))
+              identifier: any(named: 'identifier'), password: any(named: 'password')))
           .thenAnswer((_) async => const Err(ValidationFailure('bad creds')));
 
       final cubit = LoginCubit(repo);
-      await cubit.submit(email: 'a@b.co', password: 'x');
+      await cubit.submit(identifier: 'a@b.co', password: 'x');
 
       expect(cubit.state.forbidden, isFalse);
     });

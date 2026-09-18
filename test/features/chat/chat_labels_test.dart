@@ -72,6 +72,7 @@ void main() {
     setUp(() {
       repo = _MockRepo();
       when(repo.getLabels).thenAnswer((_) async => const Success([_work]));
+      when(repo.getQuestions).thenAnswer((_) async => const Success([]));
       when(repo.getChats).thenAnswer((_) async => Success([
             _conv(1, labels: const [_work]),
             _conv(2),

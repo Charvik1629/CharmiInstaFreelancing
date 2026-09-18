@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/di/injection.dart';
+import '../../../../core/realtime/socket_service.dart';
 import '../../../../core/utils/result.dart';
 import '../../domain/entities/chat_label.dart';
 import '../../domain/entities/conversation.dart';
@@ -12,9 +16,36 @@ part 'chat_list_state.dart';
 /// direct/group come from GET /chats, broadcasts from GET /broadcasts, and
 /// "All" merges both, newest-first.
 class ChatListCubit extends Cubit<ChatListState> {
-  ChatListCubit(this._repository) : super(const ChatListState());
+  ChatListCubit(this._repository) : super(const ChatListState()) {
+    _listenRealtime();
+  }
 
   final ChatRepository _repository;
+
+  final List<StreamSubscription<void>> _socketSubs = [];
+
+  /// Keeps the inbox live: a new conversation (someone requested your post) or a
+  /// new incoming message re-fetches the list so it appears / reorders at once.
+  void _listenRealtime() {
+    if (!sl.isRegistered<SocketService>()) return;
+    final socket = sl<SocketService>();
+    _socketSubs.add(socket.conversationCreated.listen((_) => _refreshLive()));
+    _socketSubs.add(socket.messages.listen((_) => _refreshLive()));
+  }
+
+  /// A background refresh that doesn't flip the list into a loading spinner.
+  void _refreshLive() {
+    if (state.status == ChatListStatus.loading) return;
+    _fetch();
+  }
+
+  @override
+  Future<void> close() {
+    for (final s in _socketSubs) {
+      s.cancel();
+    }
+    return super.close();
+  }
 
   /// The last fetched (unfiltered-by-label) list, so the label filter can be
   /// applied client-side without a refetch.
@@ -67,16 +98,20 @@ class ChatListCubit extends Cubit<ChatListState> {
     switch (state.filter) {
       case ChatFilter.all:
         final chats = await _repository.getChats();
+        final questions = await _repository.getQuestions();
         final broadcasts = await _repository.getBroadcasts();
-        // Merge; if both failed, surface an error, otherwise show what we got.
-        if (chats is Err && broadcasts is Err) {
+        // Merge all inbox sources; error only if everything failed.
+        if (chats is Err && questions is Err && broadcasts is Err) {
           return _emitError(
               chats.failureOrNull?.message ?? 'Could not load chats');
         }
+        final seen = <int>{};
         final merged = <Conversation>[
           ...chats.valueOrNull ?? const [],
+          ...questions.valueOrNull ?? const [],
           ...broadcasts.valueOrNull ?? const [],
-        ]..sort(_byRecent);
+        ].where((c) => seen.add(c.id)).toList()
+          ..sort(_byRecent);
         _emitList(merged);
       case ChatFilter.unread:
         _handle(await _repository.getChats(), keep: (c) => c.hasUnread);
@@ -88,6 +123,14 @@ class ChatListCubit extends Cubit<ChatListState> {
             keep: (c) => c.type == ConversationType.group);
       case ChatFilter.questions:
         _handle(await _repository.getQuestions());
+      case ChatFilter.photos:
+        _handle(await _repository.getChats(hasMedia: 'image'));
+      case ChatFilter.videos:
+        _handle(await _repository.getChats(hasMedia: 'video'));
+      case ChatFilter.voice:
+        _handle(await _repository.getChats(hasMedia: 'audio'));
+      case ChatFilter.links:
+        _handle(await _repository.getChats(hasLinks: true));
       case ChatFilter.broadcasts:
         _handle(await _repository.getBroadcasts());
     }
@@ -123,10 +166,20 @@ class ChatListCubit extends Cubit<ChatListState> {
 
   /// Newest activity first; threads without a last message sink to the bottom.
   static int _byRecent(Conversation a, Conversation b) {
+    // Pinned conversations always sort above unpinned ones.
+    if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
     final at = a.lastMessageAt, bt = b.lastMessageAt;
     if (at == null && bt == null) return 0;
     if (at == null) return 1;
     if (bt == null) return -1;
     return bt.compareTo(at);
+  }
+
+  /// Pins / unpins a conversation, then reloads so it re-sorts to the top.
+  Future<Result<void>> togglePin(Conversation c) async {
+    final result =
+        await _repository.pinConversation(c.id, pin: !c.isPinned);
+    if (result.isSuccess) await _fetch();
+    return result;
   }
 }

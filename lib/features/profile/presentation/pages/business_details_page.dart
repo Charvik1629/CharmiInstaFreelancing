@@ -188,18 +188,18 @@ class _BusinessDetailsViewState extends State<_BusinessDetailsView> {
                 AppTextField(
                   controller: _business,
                   label: 'Business / firm name',
-                  hint: 'Kapoor Traders',
+                  hint: 'Enter business name',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _companyTypeField(),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
-                    controller: _msme, label: 'MSME / Udyam no.', hint: 'UDYAM-…'),
+                    controller: _msme, label: 'MSME / Udyam no.', hint: 'Enter MSME / Udyam no.'),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
                     controller: _association,
                     label: 'Association / body',
-                    hint: 'e.g. Surat Textile Assn.'),
+                    hint: 'Enter association'),
 
                 _sectionLabel('KYC'),
                 if ((gst ?? '').isNotEmpty)
@@ -212,20 +212,20 @@ class _BusinessDetailsViewState extends State<_BusinessDetailsView> {
                 AppTextField(
                     controller: _phone,
                     label: 'Mobile',
-                    hint: '9876543210',
+                    hint: 'Enter mobile number',
                     keyboardType: TextInputType.phone),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
                     controller: _website,
                     label: 'Website',
-                    hint: 'https://…',
+                    hint: 'Enter website',
                     keyboardType: TextInputType.url),
 
                 _sectionLabel('Address'),
                 AppTextField(
                     controller: _address,
                     label: 'Address line',
-                    hint: 'Shop / plot, street'),
+                    hint: 'Enter address'),
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,17 +233,17 @@ class _BusinessDetailsViewState extends State<_BusinessDetailsView> {
                     Expanded(
                         flex: 2,
                         child: AppTextField(
-                            controller: _city, label: 'City', hint: 'Surat')),
+                            controller: _city, label: 'City', hint: 'Enter city')),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                         child: AppTextField(
-                            controller: _state, label: 'State', hint: 'GJ')),
+                            controller: _state, label: 'State', hint: 'Enter state')),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                         child: AppTextField(
                             controller: _pincode,
                             label: 'PIN',
-                            hint: '395002',
+                            hint: 'Enter pincode',
                             keyboardType: TextInputType.number)),
                   ],
                 ),
@@ -266,13 +266,13 @@ class _BusinessDetailsViewState extends State<_BusinessDetailsView> {
                 AppTextField(
                     controller: _instagram,
                     label: 'Instagram',
-                    hint: '@handle or URL'),
+                    hint: 'Enter Instagram'),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
-                    controller: _facebook, label: 'Facebook', hint: 'Page URL'),
+                    controller: _facebook, label: 'Facebook', hint: 'Enter Facebook page'),
                 const SizedBox(height: AppSpacing.md),
                 AppTextField(
-                    controller: _linkedin, label: 'LinkedIn', hint: 'Profile URL'),
+                    controller: _linkedin, label: 'LinkedIn', hint: 'Enter LinkedIn profile'),
 
                 const SizedBox(height: AppSpacing.xl),
                 AppButton(

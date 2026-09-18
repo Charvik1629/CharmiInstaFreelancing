@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../features/chat/domain/entities/chat_message.dart';
@@ -9,8 +10,8 @@ import '../constants/api_endpoints.dart';
 import '../di/injection.dart';
 import '../network/api_client.dart';
 import '../storage/storage_keys.dart';
+import '../config/app_config.dart';
 import '../storage/storage_manager.dart';
-import '../utils/logger.dart';
 
 /// A realtime message pushed over the socket (`message:new`).
 class RealtimeMessage {
@@ -22,6 +23,45 @@ class RealtimeMessage {
   final int conversationId;
   final ChatMessage message;
   final bool isBroadcast;
+}
+
+/// Peer typing state pushed over the socket (`typing:update`).
+class TypingEvent {
+  const TypingEvent({
+    required this.conversationId,
+    this.userId,
+    this.name,
+    this.isTyping = false,
+  });
+  final int conversationId;
+  final int? userId;
+  final String? name;
+  final bool isTyping;
+}
+
+/// Peer read marker pushed over the socket (`message:read`).
+class ReadEvent {
+  const ReadEvent({
+    required this.conversationId,
+    this.userId,
+    required this.lastReadAt,
+  });
+  final int conversationId;
+  final int? userId;
+  final DateTime lastReadAt;
+}
+
+/// A user's online / last-seen status (`presence:update` or a `presence:check`
+/// ack).
+class PresenceEvent {
+  const PresenceEvent({
+    required this.userId,
+    required this.isOnline,
+    this.lastSeenAt,
+  });
+  final int userId;
+  final bool isOnline;
+  final DateTime? lastSeenAt;
 }
 
 /// Socket.IO client for live chat + unread badges (design: realtime).
@@ -36,11 +76,35 @@ class SocketService {
 
   io.Socket? _socket;
   final _messages = StreamController<RealtimeMessage>.broadcast();
+  final _conversationCreated = StreamController<void>.broadcast();
+  final _typingEvents = StreamController<TypingEvent>.broadcast();
+  final _readEvents = StreamController<ReadEvent>.broadcast();
+  final _presenceEvents = StreamController<PresenceEvent>.broadcast();
 
   /// Broadcast of incoming messages; conversation screens filter by id.
   Stream<RealtimeMessage> get messages => _messages.stream;
 
+  /// Online/last-seen changes for users (from `presence:update`).
+  Stream<PresenceEvent> get presenceEvents => _presenceEvents.stream;
+
+  /// Peer typing state per conversation (from `typing:update`).
+  Stream<TypingEvent> get typingEvents => _typingEvents.stream;
+
+  /// Peer read markers per conversation (from `message:read`).
+  Stream<ReadEvent> get readEvents => _readEvents.stream;
+
+  /// Fires when a new conversation is created for the user (e.g. someone
+  /// requests their post) — the inbox listens and refreshes.
+  Stream<void> get conversationCreated => _conversationCreated.stream;
+
   bool get isConnected => _socket?.connected ?? false;
+
+  /// Logcat-visible socket trace (mirrors the HTTP `NEXVEERO-HTTP` tag). Uses
+  /// [debugPrint] because `dart:developer` logs don't surface in `adb logcat`.
+  static const _tag = 'NEXVEERO-SOCKET';
+  void _log(String msg) {
+    if (AppConfig.current.enableLogging) debugPrint('$_tag $msg');
+  }
 
   Future<void> connect() async {
     if (_socket != null) return;
@@ -50,7 +114,11 @@ class SocketService {
       final data = res.data?['data'];
       final url = data is Map ? data['socket_url'] as String? : null;
       final token = await _storage.readSecure(StorageKeys.authToken);
-      if (url == null || url.isEmpty || token == null) return;
+      if (url == null || url.isEmpty || token == null) {
+        _log('✗ no socket_url/token — realtime disabled, falling back to polling');
+        return;
+      }
+      _log('→ connecting to $url');
 
       final socket = io.io(
         url,
@@ -62,18 +130,25 @@ class SocketService {
       );
       _socket = socket;
 
-      socket.onConnect((_) => AppLogger.i('Socket connected'));
-      socket.onConnectError((e) => AppLogger.w('Socket connect error: $e'));
+      socket.onConnect((_) => _log('✓ connected ($url)'));
+      socket.onDisconnect((r) => _log('✗ disconnected ($r)'));
+      socket.onConnectError((e) => _log('✗ connect error: $e'));
+      socket.onError((e) => _log('✗ error: $e'));
       socket.on('message:new', _onMessage);
       socket.on('unread:update', _onUnread);
+      socket.on('conversation:created', _onConversationCreated);
+      socket.on('typing:update', _onTyping);
+      socket.on('message:read', _onRead);
+      socket.on('presence:update', _onPresence);
       socket.connect();
     } catch (e) {
-      AppLogger.w('Socket connect failed: $e');
+      _log('✗ connect failed: $e');
     }
   }
 
   /// Joins a conversation room so its messages stream in live.
   void joinConversation(int conversationId) {
+    _log('emit conversation:join #$conversationId');
     _socket?.emit('conversation:join', {'conversation_id': conversationId});
   }
 
@@ -85,18 +160,106 @@ class SocketService {
   void _onMessage(dynamic data) {
     if (data is! Map) return;
     final json = Map<String, dynamic>.from(data);
-    final convId = (json['conversation_id'] as num?)?.toInt();
-    if (convId == null) return;
+    // The message fields may be flat, or nested under `message`/`data` depending
+    // on the socket server. Unwrap so `id` is always read from the real message.
+    final inner = json['message'] is Map
+        ? Map<String, dynamic>.from(json['message'] as Map)
+        : (json['data'] is Map
+            ? Map<String, dynamic>.from(json['data'] as Map)
+            : json);
+    final convId = ((json['conversation_id'] ?? inner['conversation_id']) as num?)
+        ?.toInt();
+    if (convId == null) {
+      _log('event message:new — dropped (no conversation_id)');
+      return;
+    }
+    final msg = ChatMessage.fromJson(inner);
+    _log('event message:new conv#$convId msg#${msg.id} '
+        'broadcast=${json['is_broadcast'] == true}');
     _messages.add(RealtimeMessage(
       conversationId: convId,
-      message: ChatMessage.fromJson(json),
+      message: msg,
       isBroadcast: json['is_broadcast'] == true,
+    ));
+  }
+
+  void _onConversationCreated(dynamic data) {
+    _log('event conversation:created');
+    _conversationCreated.add(null);
+  }
+
+  void _onTyping(dynamic data) {
+    if (data is! Map) return;
+    final json = Map<String, dynamic>.from(data);
+    final convId = (json['conversation_id'] as num?)?.toInt();
+    if (convId == null) return;
+    _typingEvents.add(TypingEvent(
+      conversationId: convId,
+      userId: (json['user_id'] as num?)?.toInt(),
+      name: json['name'] as String?,
+      isTyping: json['is_typing'] == true,
+    ));
+  }
+
+  void _onPresence(dynamic data) {
+    if (data is! Map) return;
+    final json = Map<String, dynamic>.from(data);
+    final userId = (json['user_id'] as num?)?.toInt();
+    if (userId == null) return;
+    _presenceEvents.add(PresenceEvent(
+      userId: userId,
+      isOnline: json['status'] == 'online',
+      lastSeenAt: DateTime.tryParse('${json['last_seen_at']}'),
+    ));
+  }
+
+  /// Asks the server for the current online/last-seen status of [userIds].
+  /// Returns a map of `userId → PresenceEvent`, or empty if unavailable.
+  Future<Map<int, PresenceEvent>> checkPresence(List<int> userIds) async {
+    final socket = _socket;
+    if (socket == null || !socket.connected || userIds.isEmpty) return {};
+    final completer = Completer<Map<int, PresenceEvent>>();
+    try {
+      socket.emitWithAck('presence:check', {'user_ids': userIds}, ack: (data) {
+        final out = <int, PresenceEvent>{};
+        if (data is Map) {
+          data.forEach((k, v) {
+            final id = int.tryParse('$k');
+            if (id != null && v is Map) {
+              out[id] = PresenceEvent(
+                userId: id,
+                isOnline: v['status'] == 'online',
+                lastSeenAt: DateTime.tryParse('${v['last_seen_at']}'),
+              );
+            }
+          });
+        }
+        if (!completer.isCompleted) completer.complete(out);
+      });
+    } catch (_) {
+      return {};
+    }
+    return completer.future.timeout(const Duration(seconds: 4),
+        onTimeout: () => {});
+  }
+
+  void _onRead(dynamic data) {
+    if (data is! Map) return;
+    final json = Map<String, dynamic>.from(data);
+    final convId = (json['conversation_id'] as num?)?.toInt();
+    final lastReadAt = DateTime.tryParse('${json['last_read_at']}');
+    if (convId == null || lastReadAt == null) return;
+    _readEvents.add(ReadEvent(
+      conversationId: convId,
+      userId: (json['user_id'] as num?)?.toInt(),
+      lastReadAt: lastReadAt,
     ));
   }
 
   void _onUnread(dynamic data) {
     if (data is! Map) return;
     final json = Map<String, dynamic>.from(data);
+    _log('event unread:update total=${json['total']}');
     if (!sl.isRegistered<UnreadCubit>()) return;
     sl<UnreadCubit>().setCounts(UnreadCounts(
       total: (json['total'] as num?)?.toInt() ?? 0,

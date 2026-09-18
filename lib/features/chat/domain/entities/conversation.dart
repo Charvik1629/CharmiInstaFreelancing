@@ -34,6 +34,7 @@ class Conversation extends Equatable {
     this.lastMessageAt,
     this.unreadCount = 0,
     this.canChat = true,
+    this.isPinned = false,
     this.labels = const [],
   });
 
@@ -57,6 +58,9 @@ class Conversation extends Equatable {
   final int unreadCount;
   final bool canChat;
 
+  /// Pinned conversations sort to the top of the inbox.
+  final bool isPinned;
+
   /// Labels attached to this conversation (direct/group only).
   final List<ChatLabel> labels;
 
@@ -78,6 +82,7 @@ class Conversation extends Equatable {
       lastMessageAt: last?.asDate('created_at'),
       unreadCount: json.asIntOr('unread_count', 0),
       canChat: json.asBool('can_chat', fallback: true),
+      isPinned: json.asBool('is_pinned'),
       labels: _labelsFrom(json['labels']),
     );
   }
@@ -148,6 +153,7 @@ class Conversation extends Equatable {
         lastMessageAt,
         unreadCount,
         canChat,
+        isPinned,
         labels,
       ];
 }

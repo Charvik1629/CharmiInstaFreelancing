@@ -51,13 +51,13 @@ void main() {
     await tester.pumpWidget(harness());
     await tester.tap(find.text('Log in'));
     await tester.pump();
-    expect(find.text('Email is required'), findsOneWidget);
+    expect(find.text('Enter your email or username'), findsOneWidget);
     expect(find.text('Password is required'), findsOneWidget);
-    verifyNever(() => repo.login(email: any(named: 'email'), password: any(named: 'password')));
+    verifyNever(() => repo.login(identifier: any(named: 'identifier'), password: any(named: 'password')));
   });
 
   testWidgets('valid submit calls repository.login', (tester) async {
-    when(() => repo.login(email: any(named: 'email'), password: any(named: 'password')))
+    when(() => repo.login(identifier: any(named: 'identifier'), password: any(named: 'password')))
         .thenAnswer((_) async => const Success(
             AuthSession(user: User(id: 1, name: 'A'), token: 't')));
 
@@ -68,6 +68,6 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    verify(() => repo.login(email: 'a@b.co', password: 'password')).called(1);
+    verify(() => repo.login(identifier: 'a@b.co', password: 'password')).called(1);
   });
 }

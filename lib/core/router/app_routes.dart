@@ -22,6 +22,7 @@ class AppRoutes {
   static const String enterPin = '/enter-pin';
   static const String deleteAccount = '/delete-account';
   static const String manageLabels = '/chat-labels';
+  static const String starredMessages = '/starred';
   static const String settings = '/settings';
   static const String notifications = '/notifications';
   static const String offers = '/offers';

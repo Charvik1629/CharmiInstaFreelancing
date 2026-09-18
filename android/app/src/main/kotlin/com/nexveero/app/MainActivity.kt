@@ -1,4 +1,4 @@
-package com.charmi.charmi_insta_freelancing
+package com.nexveero.app
 
 import io.flutter.embedding.android.FlutterActivity
 

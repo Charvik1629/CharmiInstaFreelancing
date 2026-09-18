@@ -19,6 +19,7 @@ import '../../features/chat/presentation/pages/chat_thread_page.dart';
 import '../../features/chat/presentation/pages/contact_info_page.dart';
 import '../../features/chat/presentation/pages/enter_pin_page.dart';
 import '../../features/chat/presentation/pages/manage_labels_page.dart';
+import '../../features/chat/presentation/pages/starred_messages_page.dart';
 import '../../features/feed/presentation/pages/create_post_page.dart';
 import '../../features/feed/presentation/pages/post_detail_page.dart';
 import '../../core/models/load.dart';
@@ -138,6 +139,9 @@ class AppRouter {
       GoRoute(
           path: AppRoutes.manageLabels,
           builder: (_, _) => const ManageLabelsPage()),
+      GoRoute(
+          path: AppRoutes.starredMessages,
+          builder: (_, _) => const StarredMessagesPage()),
       GoRoute(path: AppRoutes.settings, builder: (_, _) => const SettingsPage()),
       GoRoute(path: AppRoutes.deleteAccount, builder: (_, _) => const DeleteAccountPage()),
       GoRoute(path: AppRoutes.notifications, builder: (_, _) => const NotificationsPage()),

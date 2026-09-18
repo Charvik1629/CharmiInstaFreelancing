@@ -72,7 +72,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 AuthField(
                   controller: _email,
                   label: 'Email',
-                  hint: 'you@email.com',
+                  hint: 'Enter email',
                   icon: Icons.mail_outline,
                   keyboardType: TextInputType.emailAddress,
                   validator: Validators.email,

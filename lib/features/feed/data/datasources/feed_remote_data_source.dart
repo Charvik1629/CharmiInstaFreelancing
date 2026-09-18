@@ -74,13 +74,15 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
       if (post.postTypeId != null) 'post_type_id': post.postTypeId,
     };
     if (post.hasImage) {
+      // Carousel upload: POST /loads accepts `media[]` (max 10, ≤50MB each).
+      final media = [
+        for (final path in post.imagePaths)
+          await MultipartFile.fromFile(path, filename: path.split('/').last),
+      ];
       return FormData.fromMap({
         ...fields,
         if (post.tagIds.isNotEmpty) 'tag_ids[]': post.tagIds,
-        'media': await MultipartFile.fromFile(
-          post.imagePath!,
-          filename: post.imagePath!.split('/').last,
-        ),
+        'media[]': media,
       });
     }
     return {

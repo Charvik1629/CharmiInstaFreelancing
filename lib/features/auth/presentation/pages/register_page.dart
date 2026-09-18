@@ -42,6 +42,7 @@ class _RegisterView extends StatefulWidget {
 class _RegisterViewState extends State<_RegisterView> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _username = TextEditingController();
   final _business = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
@@ -57,6 +58,7 @@ class _RegisterViewState extends State<_RegisterView> {
   @override
   void dispose() {
     _name.dispose();
+    _username.dispose();
     _business.dispose();
     _phone.dispose();
     _email.dispose();
@@ -75,6 +77,7 @@ class _RegisterViewState extends State<_RegisterView> {
       final gstMode = _kyc == _KycMode.gst;
       context.read<RegisterCubit>().submit(
             name: _name.text.trim(),
+            username: _username.text.trim().toLowerCase(),
             businessName: _business.text.trim(),
             phone: _phone.text.trim(),
             email: _email.text.trim(),
@@ -99,6 +102,8 @@ class _RegisterViewState extends State<_RegisterView> {
       body: BlocListener<RegisterCubit, AuthFormState>(
         listenWhen: (p, c) => p.status != c.status,
         listener: (context, state) {
+          // Drive the single app-wide loader off the submit transition.
+          state.isSubmitting ? AppLoader.show() : AppLoader.hide();
           if (state.status == FormStatus.success && state.user != null) {
             context.go(AppRoutes.pendingApproval, extra: state.user);
           } else if (state.status == FormStatus.failure) {
@@ -130,9 +135,26 @@ class _RegisterViewState extends State<_RegisterView> {
                       return Column(
                         children: [
                           AuthField(
+                            controller: _username,
+                            label: 'Username',
+                            hint: 'Enter a username',
+                            icon: Icons.alternate_email,
+                            validator: (v) {
+                              final s = (v ?? '').trim();
+                              if (s.isEmpty) return 'Choose a username';
+                              if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9_]{2,29}$')
+                                  .hasMatch(s)) {
+                                return '3–30 chars, start with a letter; letters, numbers, _';
+                              }
+                              return null;
+                            },
+                            serverError: state.fieldError('username'),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          AuthField(
                             controller: _name,
                             label: 'Business owner name',
-                            hint: 'As on GST / PAN',
+                            hint: 'Enter owner name',
                             icon: Icons.person_outline,
                             validator: Validators.name,
                             serverError: state.fieldError('name'),
@@ -141,7 +163,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _business,
                             label: 'Business / firm name',
-                            hint: 'Doe Transport',
+                            hint: 'Enter business name',
                             icon: Icons.storefront_outlined,
                             validator: (v) =>
                                 Validators.required(v, field: 'Business name'),
@@ -151,7 +173,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _phone,
                             label: 'Mobile number',
-                            hint: '9876543210',
+                            hint: 'Enter mobile number',
                             icon: Icons.phone_outlined,
                             keyboardType: TextInputType.phone,
                             validator: Validators.phone,
@@ -161,7 +183,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _email,
                             label: 'Email',
-                            hint: 'you@business.com',
+                            hint: 'Enter email',
                             icon: Icons.alternate_email,
                             keyboardType: TextInputType.emailAddress,
                             validator: Validators.email,
@@ -175,7 +197,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _referral,
                             label: 'Referral code (optional)',
-                            hint: 'ALICE10',
+                            hint: 'Enter referral code',
                             icon: Icons.card_giftcard_outlined,
                             validator: (_) => null,
                             serverError: state.fieldError('referral_code'),
@@ -184,7 +206,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _password,
                             label: 'Password',
-                            hint: '••••••••',
+                            hint: 'Enter password',
                             icon: Icons.lock_outline,
                             obscure: true,
                             validator: Validators.password,
@@ -194,7 +216,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           AuthField(
                             controller: _confirm,
                             label: 'Confirm password',
-                            hint: '••••••••',
+                            hint: 'Re-enter password',
                             icon: Icons.lock_outline,
                             obscure: true,
                             validator: (v) =>
@@ -204,8 +226,7 @@ class _RegisterViewState extends State<_RegisterView> {
                           const SizedBox(height: AppSpacing.xl),
                           AppButton(
                             label: 'Create account',
-                            isLoading: state.isSubmitting,
-                            onPressed: _submit,
+                            onPressed: state.isSubmitting ? null : _submit,
                           ),
                         ],
                       );
@@ -249,7 +270,7 @@ class _RegisterViewState extends State<_RegisterView> {
         AuthField(
           controller: _gst,
           label: 'GST number',
-          hint: '27AAPFU0939F1ZV',
+          hint: 'Enter GST number',
           icon: Icons.badge_outlined,
           textCapitalization: TextCapitalization.characters,
           inputFormatters: [
@@ -265,7 +286,7 @@ class _RegisterViewState extends State<_RegisterView> {
       AuthField(
         controller: _pan,
         label: 'PAN',
-        hint: 'AAPFU0939F',
+        hint: 'Enter PAN',
         icon: Icons.badge_outlined,
         textCapitalization: TextCapitalization.characters,
         inputFormatters: [
@@ -279,7 +300,7 @@ class _RegisterViewState extends State<_RegisterView> {
       AuthField(
         controller: _aadhaar,
         label: 'Aadhaar number',
-        hint: '234567890123',
+        hint: 'Enter Aadhaar number',
         icon: Icons.badge_outlined,
         keyboardType: TextInputType.number,
         inputFormatters: [

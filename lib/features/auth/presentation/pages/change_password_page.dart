@@ -75,7 +75,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 AuthField(
                   controller: _current,
                   label: 'Current password',
-                  hint: '••••••••',
+                  hint: 'Enter password',
                   icon: Icons.lock_outline,
                   obscure: true,
                   validator: (v) => Validators.required(v, field: 'Current password'),
@@ -84,7 +84,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 AuthField(
                   controller: _next,
                   label: 'New password',
-                  hint: '••••••••',
+                  hint: 'Enter password',
                   icon: Icons.lock_open_outlined,
                   obscure: true,
                   validator: Validators.password,
@@ -94,7 +94,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 AuthField(
                   controller: _confirm,
                   label: 'Confirm new password',
-                  hint: '••••••••',
+                  hint: 'Enter password',
                   icon: Icons.lock_outline,
                   obscure: true,
                   validator: (v) => Validators.confirmPassword(v, _next.text),

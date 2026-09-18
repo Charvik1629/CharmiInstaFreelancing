@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/models/load.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
@@ -52,20 +55,151 @@ class PostDetailPage extends StatelessWidget {
         context, result.isSuccess ? 'Report submitted' : 'Could not report');
   }
 
-  void _share(BuildContext context) {
-    // The system share sheet arrives with share_plus; surface intent for now.
-    AppOverlays.snack(context, 'Sharing opens the system share sheet.');
+  Future<void> _share(BuildContext context) async {
+    final by = load.author?.name;
+    final text = [
+      load.title,
+      if (by != null) 'by $by',
+      'on Nexveero',
+    ].join(' ');
+    await SharePlus.instance.share(ShareParams(text: text));
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: 'Delete post?',
+      message: 'This removes the post for everyone. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    );
+    if (!ok || !context.mounted) return;
+    final result = await AppLoader.run(sl<FeedRepository>().deleteLoad(load.id));
+    if (!context.mounted) return;
+    if (result.isSuccess) {
+      AppOverlays.snack(context, 'Post deleted');
+      context.pop();
+    } else {
+      AppOverlays.snack(context, result.failureOrNull?.message ?? 'Delete failed');
+    }
+  }
+
+  Future<void> _boost(BuildContext context) async {
+    final result = await AppLoader.run(sl<FeedRepository>().boostLoad(load.id));
+    if (!context.mounted) return;
+    AppOverlays.snack(context,
+        result.isSuccess ? 'Post boosted 🚀' : (result.failureOrNull?.message ?? 'Could not boost'));
+  }
+
+  Future<void> _markSold(BuildContext context) async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: 'Mark as sold?',
+      message: 'This closes the post to new requests and offers.',
+      confirmLabel: 'Mark sold',
+    );
+    if (!ok || !context.mounted) return;
+    final result = await AppLoader.run(sl<FeedRepository>().markSold(load.id));
+    if (!context.mounted) return;
+    AppOverlays.snack(context,
+        result.isSuccess ? 'Marked as sold' : (result.failureOrNull?.message ?? 'Could not update'));
+  }
+
+  /// The ⋯ menu (design "Post Menu"): owner sees Edit / Boost / Mark sold /
+  /// Delete; others see Share / Report.
+  Future<void> _openMenu(BuildContext context) async {
+    final nex = context.nexveero;
+    final action = await AppOverlays.sheet<String>(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: AppSpacing.xs),
+            child: Text('POST OPTIONS',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: nex.textSecondary)),
+          ),
+          if (load.isOwn) ...[
+            if (load.canEdit)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit post'),
+                onTap: () => Navigator.of(ctx).pop('edit'),
+              ),
+            if (load.canBoost)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.rocket_launch),
+                title: const Text('Boost post'),
+                onTap: () => Navigator.of(ctx).pop('boost'),
+              ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.check_circle_outline),
+              title: const Text('Mark as sold'),
+              onTap: () => Navigator.of(ctx).pop('sold'),
+            ),
+            if (load.canDelete)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.delete_outline,
+                    color: Theme.of(ctx).colorScheme.error),
+                title: Text('Delete',
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                onTap: () => Navigator.of(ctx).pop('delete'),
+              ),
+          ] else ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Share'),
+              onTap: () => Navigator.of(ctx).pop('share'),
+            ),
+            if (load.canReport)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Report'),
+                onTap: () => Navigator.of(ctx).pop('report'),
+              ),
+          ],
+        ],
+      ),
+    );
+    if (action == null || !context.mounted) return;
+    switch (action) {
+      case 'edit':
+        context.push(AppRoutes.createPost, extra: load);
+      case 'boost':
+        _boost(context);
+      case 'sold':
+        _markSold(context);
+      case 'delete':
+        _delete(context);
+      case 'report':
+        _report(context);
+      case 'share':
+        _share(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final nex = context.nexveero;
     final texts = Theme.of(context).textTheme;
-    final image = MediaUrl.resolve(load.mediaUrl);
+    final images = [
+      for (final m in load.imageMedia) ?MediaUrl.resolve(m.url),
+    ];
     return Scaffold(
       appBar: AppBar(leading: const BackButton(), title: const Text('Post')),
       body: ListView(
-        padding: EdgeInsets.zero,
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
         children: [
           // Author row with gradient avatar ring + verified tick.
           Padding(
@@ -116,13 +250,17 @@ class PostDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.more_horiz, color: nex.iconInactive),
+                InkResponse(
+                  onTap: () => _openMenu(context),
+                  radius: 22,
+                  child: Icon(Icons.more_horiz, color: nex.iconInactive),
+                ),
               ],
             ),
           ),
-          // Image (carousel-ready; a single load has one image today).
-          if (image != null)
-            _ImageCarousel(urls: [image])
+          // Image carousel — all media[] images with page dots.
+          if (images.isNotEmpty)
+            _ImageCarousel(urls: images)
           else
             const AspectRatio(
               aspectRatio: 1,

@@ -7,7 +7,7 @@ import '../entities/unread_counts.dart';
 
 /// Domain contract for chat. Covers direct, group and broadcast threads.
 abstract class ChatRepository {
-  Future<Result<List<Conversation>>> getChats();
+  Future<Result<List<Conversation>>> getChats({String? hasMedia, bool hasLinks});
   Future<Result<List<Conversation>>> getBroadcasts();
   Future<Result<List<Conversation>>> getQuestions();
 
@@ -30,6 +30,16 @@ abstract class ChatRepository {
 
   /// Delete a message (server enforces the ≤24h window).
   Future<Result<void>> deleteMessage(int conversationId, int messageId);
+
+  /// Stars / unstars a message (POST/DELETE …/star).
+  Future<Result<void>> starMessage(int conversationId, int messageId,
+      {required bool star});
+
+  /// Pins / unpins a conversation to the top of the inbox (POST/DELETE …/pin).
+  Future<Result<void>> pinConversation(int conversationId, {required bool pin});
+
+  /// GET /messages/starred — every message you've starred, newest first.
+  Future<Result<List<ChatMessage>>> getStarredMessages();
 
   /// Send a location or contact message.
   Future<Result<ChatMessage>> sendMeta({

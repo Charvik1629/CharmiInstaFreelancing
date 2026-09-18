@@ -10,6 +10,10 @@ enum ChatFilter {
   direct('Direct'),
   groups('Groups'),
   questions('Questions'),
+  photos('Photos'),
+  videos('Videos'),
+  voice('Voice'),
+  links('Links'),
   broadcasts('Broadcasts');
 
   const ChatFilter(this.label);

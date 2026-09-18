@@ -38,6 +38,11 @@ class _ChatListView extends StatelessWidget {
         centerTitle: false,
         actions: [
           IconButton(
+            icon: const Icon(Icons.star_border),
+            tooltip: 'Starred messages',
+            onPressed: () => context.push(AppRoutes.starredMessages),
+          ),
+          IconButton(
             icon: const Icon(Icons.label_outline),
             tooltip: 'Manage labels',
             onPressed: () => context.push(AppRoutes.manageLabels),
@@ -175,6 +180,39 @@ class _ConversationTile extends StatelessWidget {
 
   final Conversation conversation;
 
+  Future<void> _openMenu(BuildContext context) async {
+    final cubit = context.read<ChatListCubit>();
+    final action = await AppOverlays.sheet<String>(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(conversation.isPinned
+                ? Icons.push_pin
+                : Icons.push_pin_outlined),
+            title: Text(conversation.isPinned ? 'Unpin chat' : 'Pin chat'),
+            onTap: () => Navigator.of(ctx).pop('pin'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.label_outline),
+            title: const Text('Manage labels'),
+            onTap: () => Navigator.of(ctx).pop('labels'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'pin') {
+      final r = await cubit.togglePin(conversation);
+      if (context.mounted && !r.isSuccess) {
+        AppOverlays.snack(
+            context, r.failureOrNull?.message ?? 'Could not update pin');
+      }
+    } else if (action == 'labels' && context.mounted) {
+      await _editLabels(context);
+    }
+  }
+
   Future<void> _editLabels(BuildContext context) async {
     final cubit = context.read<ChatListCubit>();
     if (cubit.state.labels.isEmpty) {
@@ -201,6 +239,10 @@ class _ConversationTile extends StatelessWidget {
       leading: _Leading(conversation: c),
       title: Row(
         children: [
+          if (c.isPinned) ...[
+            Icon(Icons.push_pin, size: 13, color: context.nexveero.textSecondary),
+            const SizedBox(width: 3),
+          ],
           Flexible(
             child: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
@@ -231,7 +273,7 @@ class _ConversationTile extends StatelessWidget {
           fontWeight: c.hasUnread ? FontWeight.w600 : FontWeight.w400,
         ),
       ),
-      onLongPress: c.isBroadcast ? null : () => _editLabels(context),
+      onLongPress: c.isBroadcast ? null : () => _openMenu(context),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,

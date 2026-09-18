@@ -22,7 +22,8 @@ class PaymentDetailPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Payment details')),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg,
+            AppSpacing.lg + MediaQuery.paddingOf(context).bottom),
         children: [
           Column(
             children: [

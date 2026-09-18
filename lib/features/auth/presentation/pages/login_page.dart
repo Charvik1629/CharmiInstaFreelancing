@@ -52,7 +52,7 @@ class _LoginViewState extends State<_LoginView> {
     FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() ?? false) {
       context.read<LoginCubit>().submit(
-            email: _email.text.trim(),
+            identifier: _email.text.trim(),
             password: _password.text,
           );
     }
@@ -67,6 +67,8 @@ class _LoginViewState extends State<_LoginView> {
       body: BlocListener<LoginCubit, AuthFormState>(
         listenWhen: (p, c) => p.status != c.status,
         listener: (context, state) async {
+          // Drive the single app-wide loader off the submit transition.
+          state.isSubmitting ? AppLoader.show() : AppLoader.hide();
           if (state.status == FormStatus.success && state.session != null) {
             await context.read<AuthCubit>().onAuthenticated(state.session!);
             if (context.mounted) context.go(AppRoutes.feed);
@@ -105,18 +107,21 @@ class _LoginViewState extends State<_LoginView> {
                         children: [
                           AuthField(
                             controller: _email,
-                            label: 'Email',
-                            hint: 'you@email.com',
+                            label: 'Email or username',
+                            hint: 'Enter email or username',
                             icon: Icons.alternate_email,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: Validators.email,
-                            serverError: state.fieldError('email'),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Enter your email or username'
+                                : null,
+                            serverError: state.fieldError('login') ??
+                                state.fieldError('email') ??
+                                state.fieldError('username'),
                           ),
                           const SizedBox(height: AppSpacing.lg),
                           AuthField(
                             controller: _password,
                             label: 'Password',
-                            hint: '••••••••',
+                            hint: 'Enter password',
                             icon: Icons.lock_outline,
                             obscure: true,
                             validator: Validators.password,
@@ -131,8 +136,7 @@ class _LoginViewState extends State<_LoginView> {
                           const SizedBox(height: AppSpacing.xl),
                           AppButton(
                             label: 'Log in',
-                            isLoading: state.isSubmitting,
-                            onPressed: _submit,
+                            onPressed: state.isSubmitting ? null : _submit,
                           ),
                         ],
                       );

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexveero — Change Tracker</title>
+<style>
+  :root{--bg:#F6F5FB;--card:#fff;--ink:#17141F;--sub:#6E6880;--border:#ECE9F3;
+        --primary:#6C47FF;--accent:#FF4D9D;--done:#1FA971;--partial:#F59E0B;--blocked:#E5484D;--info:#3B82F6;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:28px}
+  h1{font-size:24px;margin:0 0 4px;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--sub);margin:0 0 22px}
+  h2{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);margin:26px 0 10px}
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{background:#faf9fe;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--sub)}
+  tr:last-child td{border-bottom:none}
+  td.num{color:var(--sub);width:34px}
+  .badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.03em;padding:3px 9px;border-radius:999px;color:#fff;white-space:nowrap}
+  .b-done{background:var(--done)} .b-partial{background:var(--partial)} .b-blocked{background:var(--blocked)}
+  .b-todo{background:var(--info)} .b-info{background:var(--sub)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 18px;font-size:13px;color:var(--sub)}
+  .note{color:var(--sub);font-size:13px}
+  code{background:#efeafd;color:var(--primary);padding:1px 5px;border-radius:5px;font-size:12.5px}
+</style>
+</head>
+<body>
+  <h1>Nexveero — Change Tracker</h1>
+  <p class="sub">Everything requested in the working session. Updated 2026-09-14.</p>
+  <div class="legend">
+    <span><span class="badge b-done">DONE</span> shipped &amp; verified</span>
+    <span><span class="badge b-todo">TO DO</span> buildable now, queued</span>
+    <span><span class="badge b-partial">PARTIAL</span> done but limited</span>
+    <span><span class="badge b-blocked">BLOCKED</span> needs backend / design</span>
+    <span><span class="badge b-info">INFO</span> explained, no code</span>
+  </div>
+
+  <h2>Design &amp; screens</h2>
+  <table>
+    <tr><th class="num">#</th><th>Ask</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">1</td><td>Business Feed tab missing → add it</td><td><span class="badge b-done">DONE</span></td><td>Nav = Home·Search·Business·Chats·Profile; feed on <code>/loads</code> type=business + Google ads.</td></tr>
+    <tr><td class="num">2</td><td>Match every screen to the design exactly</td><td><span class="badge b-done">DONE</span></td><td>Full audit + rebuild; badges on the design file (all 63 green).</td></tr>
+    <tr><td class="num">3</td><td>Every dialog/bottom-sheet exact to design</td><td><span class="badge b-done">DONE</span></td><td>Aurora Bloom confirm/prompt; Post/Business ⋯ sheets; full-screen Enter-PIN &amp; Delete-Account.</td></tr>
+    <tr><td class="num">4</td><td>Complete all partial/pending screens</td><td><span class="badge b-done">DONE</span></td><td>Request Success, Overage, Skeletons, Order/Payment details, admin broadcast screens.</td></tr>
+    <tr><td class="num">5</td><td>Field hints → plain "Enter …" everywhere</td><td><span class="badge b-done">DONE</span></td><td>All format-example hints replaced app-wide.</td></tr>
+  </table>
+
+  <h2>APIs &amp; features</h2>
+  <table>
+    <tr><th class="num">#</th><th>Ask</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">6</td><td>Point app at live backend</td><td><span class="badge b-done">DONE</span></td><td>Base URL <code>https://nexveero.com/api/v1</code>.</td></tr>
+    <tr><td class="num">7</td><td>Wire the documented APIs</td><td><span class="badge b-done">DONE</span></td><td>Chat-depth (edit/delete/block/location/contact), <code>/businesses</code>, sold, delete-account, etc.</td></tr>
+    <tr><td class="num">8</td><td>Payments: Razorpay + Apple/Google IAP</td><td><span class="badge b-done">DONE</span></td><td>Chooser + Razorpay checkout→verify. IAP verify endpoint now official (see #17).</td></tr>
+    <tr><td class="num">9</td><td>Edit post + broadcast edit/delete</td><td><span class="badge b-done">DONE</span></td><td><code>POST /loads/{id}</code>, <code>PUT/DELETE /broadcasts/{id}</code>.</td></tr>
+    <tr><td class="num">10</td><td>Realtime socket (live chat/unread)</td><td><span class="badge b-done">DONE</span></td><td>Socket.IO via <code>/socket/auth</code>; <code>message:new</code>, <code>unread:update</code>.</td></tr>
+    <tr><td class="num">11</td><td>API request/response logs in Logcat</td><td><span class="badge b-done">DONE</span></td><td>Filter <code>NEXVEERO-HTTP</code> (method, URL, status, body).</td></tr>
+  </table>
+
+  <h2>Device / build</h2>
+  <table>
+    <tr><th class="num">#</th><th>Ask</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">12</td><td>Install &amp; run on real Android device</td><td><span class="badge b-done">DONE</span></td><td>Running on CPH2871 against live backend.</td></tr>
+    <tr><td class="num">13</td><td>Android push notifications</td><td><span class="badge b-blocked">BLOCKED</span></td><td><strong>Re-enable attempted</strong> (restored push_service + firebase_options, google-services plugin, uncommented deps). Both firebase_core <strong>4.x and 3.x fail identically</strong> under the pinned toolchain: <code>:firebase_core:compileDebugJavaWithJavac</code> → <em>"Cannot query the value of this provider because it has no value available"</em> (AGP 8.11.1 + Flutter built-in-Kotlin incompatibility). Reverted to keep the build green. Needs a coordinated Android toolchain fix (AGP alignment) — <code>google-services.json</code> + real impl (git <code>10d7040</code>) are ready to restore.</td></tr>
+    <tr><td class="num">14</td><td>Free the full disk / fix Android Studio</td><td><span class="badge b-done">DONE</span></td><td>Reclaimed ~13&nbsp;GB (caches).</td></tr>
+  </table>
+
+  <h2>This-session UI fixes &amp; questions</h2>
+  <table>
+    <tr><th class="num">#</th><th>Ask</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">15</td><td>Offer button cramped → add padding, make proper</td><td><span class="badge b-done">DONE</span></td><td>The design's feed card has a <strong>single</strong> full-width CTA ("Request this post") — the cramped inline "Offer" wasn't in the design. Removed it; offers are made on <strong>Post Detail</strong> (Ask · Share · Offer · Report → "Make an offer" modal), which already works.</td></tr>
+    <tr><td class="num">16</td><td>Gap between Add tile and selected image</td><td><span class="badge b-done">DONE</span></td><td>Design is a <strong>3-column grid</strong> (<code>repeat(3,1fr)</code>, 8px gap), not a horizontal row — the old <code>Expanded</code> row caused the gap. Rebuilt as a square-tile grid; Add is the next cell. Long-press a thumbnail to reorder.</td></tr>
+    <tr><td class="num">17</td><td>Multi-image posts — upload</td><td><span class="badge b-done">DONE</span></td><td>Backend now accepts a <code>media[]</code> carousel (max 10, ≤50MB each: jpg/png/webp/pdf/mp4/mov/webm). Composer already picks/reorders/removes multiple; now the app uploads them all as <code>media[]</code>, caps at 10, hides the Add tile at 10, and the "only first photo" note is gone.</td></tr>
+    <tr><td class="num">42</td><td>Multi-image display — Instagram carousel</td><td><span class="badge b-done">DONE</span></td><td>The feed only showed the single cover. Now the <code>Load</code> model parses the full <code>media[]</code> array, and both the <strong>feed card</strong> and <strong>post detail</strong> render a swipeable pager with the design's indicator (elongated active pill 16×5 + small dots). Single-image posts render exactly as before.</td></tr>
+    <tr><td class="num">43</td><td>Bottom content cut off under the nav bar</td><td><span class="badge b-done">DONE</span></td><td>Android edge-to-edge draws pages behind the system nav bar. Added the nav-bar inset to the bottom padding of the scrollable pages that lacked a bottom nav: <strong>Settings</strong>, <strong>Delete account</strong>, <strong>Post detail</strong>, <strong>Payment detail</strong>, <strong>Broadcast limits</strong>, <strong>Create broadcast group</strong>. Last row/button no longer hidden.</td></tr>
+    <tr><td class="num">44</td><td>Post detail ⋯ (three dots) not clickable</td><td><span class="badge b-done">DONE</span></td><td>The ⋯ now opens a post-options menu — owner: <strong>Edit / Boost / Mark sold / Delete</strong> (wired to the live APIs, delete pops back); others: <strong>Share / Report</strong>.</td></tr>
+    <tr><td class="num">45</td><td>Registration missing username</td><td><span class="badge b-done">DONE</span></td><td>The API requires a unique <code>username</code>; the form didn't collect it (register was failing). Added a <strong>Username</strong> field with validation (3–30, starts with a letter, letters/numbers/_ , lowercased on submit) and wired it through cubit → repo → <code>POST /auth/register</code>.</td></tr>
+    <tr><td class="num">46</td><td>Login with username (not just email)</td><td><span class="badge b-done">DONE</span></td><td>Login now sends a single <code>login</code> identifier that the API accepts as <strong>username, email, or mobile</strong>. Field relabeled "Email or username" with format validation relaxed.</td></tr>
+    <tr><td class="num">47</td><td>New post "Add" (photo) not working</td><td><span class="badge b-done">DONE</span></td><td>The gallery pick was gated behind <code>READ_MEDIA_IMAGES</code>; if that was denied, "Add" silently did nothing. Android's system Photo Picker needs no permission, so the gate is removed for the gallery (camera still asks). Tapping Add now always opens the picker.</td></tr>
+    <tr><td class="num">48</td><td>Chat: keyboard hides the last message</td><td><span class="badge b-done">DONE</span></td><td>The message list was top-anchored, so opening the keyboard pushed the newest message out of view. Converted it to a <strong>reverse (bottom-anchored) list</strong> — it stays pinned to the latest message and handles the keyboard automatically; older messages page in when you scroll up.</td></tr>
+    <tr><td class="num">49</td><td>New request/chat doesn't appear live ("Viral requested me, web shows it, app doesn't")</td><td><span class="badge b-done">DONE</span></td><td>The socket ignored <code>conversation:created</code>, so a new conversation only showed after a manual refresh. Now the inbox listens to <code>conversation:created</code> and new messages and re-fetches live. Also: the <strong>All</strong> tab now merges <strong>Questions</strong> too (it was chats + broadcasts only), so no conversation type is hidden.</td></tr>
+    <tr><td class="num">50</td><td>Registration field order — Username first</td><td><span class="badge b-done">DONE</span></td><td>Moved <strong>Username</strong> above <strong>Business owner name</strong>.</td></tr>
+  </table>
+
+  <h2>Chat parity with web (from live web walkthrough)</h2>
+  <table>
+    <tr><th class="num">#</th><th>Web has it, mobile didn't</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">51</td><td>Date separators ("Today")</td><td><span class="badge b-done">DONE</span></td><td>Messages are now grouped by day with a centered Today / Yesterday / date chip.</td></tr>
+    <tr><td class="num">52</td><td>System/event lines ("X requested load …")</td><td><span class="badge b-done">DONE</span></td><td><code>type:"system"</code> messages now render as a centered banner instead of a plain bubble (matches web).</td></tr>
+    <tr><td class="num">53</td><td>Typing indicator</td><td><span class="badge b-done">DONE</span></td><td>Composer emits <code>typing:start/stop</code> (debounced); the header shows "typing…" from the peer's <code>typing:update</code> events, auto-clearing after idle.</td></tr>
+    <tr><td class="num">54</td><td>Presence (online / last seen)</td><td><span class="badge b-done">DONE</span></td><td>Direct-chat header now shows <strong>Online</strong> / <strong>last seen …</strong> — seeded via <code>presence:check</code> (ack) on open and updated live from <code>presence:update</code>. Priority: typing… › Online › last seen.</td></tr>
+    <tr><td class="num">55</td><td>Read receipts (delivered/read)</td><td><span class="badge b-done">DONE</span></td><td>My messages show <strong>✓ sent</strong>, turning to <strong>✓✓ read</strong> when the peer's <code>message:read</code> marker passes them.</td></tr>
+    <tr><td class="num">56</td><td>Chat media filters (Photos/Videos/Voice/Links)</td><td><span class="badge b-done">DONE</span></td><td>Added filter chips wired to <code>GET /chats?has_media=image|video|audio</code> and <code>?has_links=1</code> (matches the web's inbox filters).</td></tr>
+    <tr><td class="num">57</td><td>Groups — verify + complete</td><td><span class="badge b-done">DONE</span></td><td>Verified already fully wired to <code>/groups</code>: recommended + my groups, join/cancel/leave, members, approve/decline join-requests, remove members. Creating a group is admin-only (403 for users), so no user-facing gap.</td></tr>
+    <tr><td class="num">58</td><td>Native share sheet (share_plus)</td><td><span class="badge b-done">DONE</span></td><td>Added the <code>share_plus</code> plugin; <strong>profile Share</strong> and <strong>post Share</strong> now open the real OS share sheet (was copy-to-clipboard).</td></tr>
+    <tr><td class="num">59</td><td>Starred-messages list screen</td><td><span class="badge b-done">DONE</span></td><td>New <strong>Starred messages</strong> screen (star icon in the Chats app bar) → <code>GET /messages/starred</code>; each row shows sender + preview + time and opens its thread on tap.</td></tr>
+    <tr><td class="num">60</td><td>Single "Write something…" field (New post)</td><td><span class="badge b-done">DONE</span></td><td>Per your call, removed the separate "Add a caption…" field — one box (sent as the post title, up to 255 chars, multi-line).</td></tr>
+    <tr><td class="num">18</td><td>Suggested creators — is there an API?</td><td><span class="badge b-blocked">BLOCKED</span></td><td>No suggested-creators/follow endpoint in docs → stays "Coming soon".</td></tr>
+    <tr><td class="num">19</td><td>Location tagging on New post</td><td><span class="badge b-blocked">BLOCKED</span></td><td>No location field on <code>/loads</code> + no GPS plugin. (QUESTIONS.md Q1)</td></tr>
+    <tr><td class="num">20</td><td>Two text fields (Title + Caption)?</td><td><span class="badge b-info">INFO</span></td><td>Title (required) + optional caption. Decide keep-both vs merge. (QUESTIONS.md Q2)</td></tr>
+    <tr><td class="num">21</td><td>Add-image / attach sheet → match design UI</td><td><span class="badge b-done">DONE</span></td><td>Restyled to the design's attach language: uppercase header, 40×40 tinted rounded icon tiles with title + subtitle, divider between rows (Photo · Camera).</td></tr>
+  </table>
+
+  <h2>Reported from device screenshots (this session)</h2>
+  <table>
+    <tr><th class="num">#</th><th>What you saw</th><th>Status</th><th>Answer / fix</th></tr>
+    <tr><td class="num">27</td><td>Chat: "same message listed twice"</td><td><span class="badge b-done">DONE</span></td><td>Root cause is a <strong>race</strong>: the live socket echo of your message can arrive <em>before</em> the send API response returns, so the socket appended it and then the send path appended it again. Both paths now go through one <code>_reconcile()</code> — it matches by server id, or replaces an un-idized echo, so the message lands exactly once (and two genuinely-identical messages still both show). Re-verifying with socket logs.</td></tr>
+    <tr><td class="num">28</td><td>No socket logs in Logcat</td><td><span class="badge b-done">DONE</span></td><td>Socket used <code>dart:developer</code> (invisible in Logcat). Now logs under tag <code>NEXVEERO-SOCKET</code>: connect/disconnect/errors, <code>conversation:join</code>, every <code>message:new</code> (conv#/msg#) and <code>unread:update</code>.</td></tr>
+    <tr><td class="num">29</td><td>Profile "Follow" shows a toast</td><td><span class="badge b-info">INFO</span></td><td>Correct — there is no follow/unfollow endpoint in the API. Stays gated until backend adds it (QUESTIONS.md / MISSING_APIS #4).</td></tr>
+    <tr><td class="num">30</td><td>Profile "Message" shows a toast, can't chat</td><td><span class="badge b-done">DONE</span></td><td>Corrected: a start-DM endpoint <strong>does</strong> exist — <code>POST /chats {user_id, pin?}</code> (already used by search results). Wired the profile <strong>Message</strong> button to it — it now opens/reopens the 1:1 thread (with the Enter-PIN step when the peer requires it). No more toast.</td></tr>
+    <tr><td class="num">31</td><td>Search / chat field: focus draws a box, wrong bg</td><td><span class="badge b-done">DONE</span></td><td>Fields sit inside a pill/card that already <em>is</em> the surface, but the theme's <code>filled</code> + primary <code>focusedBorder</code> still drew a box-in-a-box on focus. Stripped fill + all borders on the embedded fields: <strong>Search</strong>, <strong>chat composer</strong>, <strong>business directory search</strong>, and the <strong>New-post</strong> title/caption fields.</td></tr>
+    <tr><td class="num">32</td><td>"BOTTOM OVERFLOWED BY 34 PIXELS" when keyboard opens (New broadcast)</td><td><span class="badge b-done">DONE</span></td><td>The empty/error placeholder was a fixed centered column that couldn't shrink, so the keyboard cramped it into an overflow. It now stays centered when there's room and scrolls when the box is short — fixes it on every screen using <code>EmptyView</code>/<code>ErrorView</code>.</td></tr>
+    <tr><td class="num">33</td><td>Selected tab (Received/Sent) → highlight with a colour</td><td><span class="badge b-done">DONE</span></td><td>The selected segment now uses the Aurora Bloom <strong>gradient</strong> with white bold text (matches the design's selected filter pill). Applies to every <code>AppSegmented</code> toggle (Offers, settings, admin, security).</td></tr>
+    <tr><td class="num">34</td><td>Compact buttons cramped — Share, Request plan, See a sample order, Offer</td><td><span class="badge b-done">DONE</span></td><td>Root cause: <code>AppButton</code> had <strong>vertical-only</strong> padding, so any <code>expanded:false</code> button hugged its text. Added horizontal padding to all three variants (gradient/tonal/outline) — one fix covers every compact button app-wide.</td></tr>
+    <tr><td class="num">35</td><td>"See a sample order" — odd name; "why such error" on Create order</td><td><span class="badge b-done">DONE</span></td><td>Resolved by implementing the real Orders module (row 22): the sample-order button and the "needs backend" toast are removed; the Orders list and Create-order now use the live API.</td></tr>
+    <tr><td class="num">36</td><td>Share profile button</td><td><span class="badge b-done">DONE</span></td><td>Backend now returns <code>share_url</code>/<code>deep_link</code> on the user object. Parsed into the <code>User</code> model; profile <strong>Share</strong> now copies the link to the clipboard ("Profile link copied"). Padding fixed too (row 34). Opening the native OS share sheet would need the <code>share_plus</code> plugin — optional upgrade, not added (touchy Android toolchain).</td></tr>
+    <tr><td class="num">37</td><td>One universal app loader (not per-button spinners)</td><td><span class="badge b-done">DONE</span></td><td>New <code>AppLoader</code>: a single dimmed full-screen overlay with the Aurora spinner, mounted once at the app root and blocking taps while it runs. Trigger from anywhere with <code>AppLoader.run(future)</code> or <code>show()/hide()</code> (ref-counted). Wired login, register, and both start-chat flows (dropped their button spinners); other flows adopt it by wrapping their call — I'll migrate the rest next.</td></tr>
+    <tr><td class="num">38</td><td>Remove Follow button (no follow API)</td><td><span class="badge b-done">DONE</span></td><td>Profile <strong>Follow</strong> button removed; <strong>Message</strong> is now the single full-width action. Backend has no follow/unfollow endpoint and we're not building follow.</td></tr>
+    <tr><td class="num">39</td><td>Remove "Suggested creators" strip (no API)</td><td><span class="badge b-done">DONE</span></td><td>The "who to follow" strip at the top of the feed is removed (widget file deleted); feed list re-indexed. No suggestions/follow endpoint exists.</td></tr>
+    <tr><td class="num">40</td><td>Post search — people only</td><td><span class="badge b-done">DONE</span></td><td>Confirmed: backend searches people only (<code>GET /users?q=</code>). Search screen is already people-only by design — no post/content search UI to remove.</td></tr>
+    <tr><td class="num">41</td><td>Re-checked "missing" APIs vs live docs</td><td><span class="badge b-done">DONE</span></td><td>Correction: <strong>Broadcast groups</strong> now exists as a full <code>/groups</code> module (members, join-requests, recommended); <strong>broadcast free-limits</strong> live under <code>GET/PUT /admin/wallet/settings</code>. Both moved out of "missing". See QUESTIONS.md.</td></tr>
+  </table>
+
+  <h2>Now unblocked by updated API docs — queued</h2>
+  <table>
+    <tr><th class="num">#</th><th>Feature</th><th>Status</th><th>Endpoints</th></tr>
+    <tr><td class="num">22</td><td>Orders: list / detail / pay / status</td><td><span class="badge b-done">DONE</span></td><td>Full module wired to the live API: <strong>Orders inbox</strong> (<code>GET /orders</code>) with status pills, <strong>detail</strong> (<code>GET /orders/{id}</code> via list), and actions — buyer <strong>Pay</strong> (<code>/pay</code>, wallet credits), seller <strong>Confirm</strong>, either party <strong>Cancel</strong>/<strong>Complete</strong> (<code>PATCH</code>). <strong>New order</strong> now really creates (<code>POST /orders</code>) — the "needs backend" toast + sample-order shell are gone.</td></tr>
+    <tr><td class="num">23</td><td>Star message</td><td><span class="badge b-done">DONE</span></td><td>Long-press any message → <strong>Star / Unstar</strong> (<code>POST/DELETE …/star</code>, optimistic); starred bubbles show a ⭐. (A dedicated starred-messages list screen is still optional.)</td></tr>
+    <tr><td class="num">24</td><td>Pin chat</td><td><span class="badge b-done">DONE</span></td><td>Long-press a chat → <strong>Pin / Unpin</strong> (<code>POST/DELETE …/pin</code>); pinned chats sort to the top with a 📌 indicator.</td></tr>
+    <tr><td class="num">25</td><td>IAP receipt verify — payload aligned</td><td><span class="badge b-done">DONE</span></td><td>Corrected the client payload to the spec: <code>platform</code> now <strong>apple/google</strong> (was ios/android), <code>product_id</code> required, and the receipt is sent as <strong><code>receipt_data</code></strong> (Apple) / <strong><code>purchase_token</code></strong> (Google) instead of one generic <code>receipt</code> key.</td></tr>
+    <tr><td class="num">26</td><td>Stories module</td><td><span class="badge b-info">INFO</span></td><td>Skipped for now, per your note.</td></tr>
+  </table>
+
+  <p class="note" style="margin-top:22px">Open decisions live in <code>QUESTIONS.md</code>. Backend still needs: <code>/broadcast-groups</code>, multi-media on posts, suggested-creators/follow, post-location field, broadcast free-limit settings.</p>
+</body>
+</html>

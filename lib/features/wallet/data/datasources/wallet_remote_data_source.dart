@@ -36,12 +36,12 @@ abstract class WalletRemoteDataSource {
   Future<void> reportOutcome({required int paymentId, required String status});
 
   /// POST /wallet/iap/verify — validate an Apple/Google store receipt and credit
-  /// the wallet. Returns the new credit balance. (Backend endpoint pending.)
+  /// the wallet. Returns the new credit balance.
   Future<int> verifyIap({
-    required int creditPackageId,
     required String platform,
-    required String receipt,
-    String? productId,
+    required String productId,
+    String? receiptData,
+    String? purchaseToken,
     String? transactionId,
   });
 }
@@ -137,19 +137,19 @@ class WalletRemoteDataSourceImpl implements WalletRemoteDataSource {
 
   @override
   Future<int> verifyIap({
-    required int creditPackageId,
     required String platform,
-    required String receipt,
-    String? productId,
+    required String productId,
+    String? receiptData,
+    String? purchaseToken,
     String? transactionId,
   }) async {
     final body = <String, dynamic>{
-      'credit_package_id': creditPackageId,
       'platform': platform,
-      'receipt': receipt,
+      'product_id': productId,
+      'receipt_data': ?receiptData,
+      'purchase_token': ?purchaseToken,
+      'transaction_id': ?transactionId,
     };
-    if (productId != null) body['product_id'] = productId;
-    if (transactionId != null) body['transaction_id'] = transactionId;
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.walletIapVerify,
       data: body,

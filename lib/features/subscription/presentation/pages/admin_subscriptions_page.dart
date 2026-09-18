@@ -146,7 +146,7 @@ class _RequestCard extends StatelessWidget {
     return AppOverlays.prompt(
       context,
       title: 'Reject request',
-      hint: 'Reason (optional, shown to user)',
+      hint: 'Enter reason (optional)',
       maxLines: 3,
       confirmLabel: 'Reject',
     );

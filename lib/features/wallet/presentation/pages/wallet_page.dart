@@ -301,12 +301,13 @@ class _PackageCard extends StatelessWidget {
           :final productId,
           :final transactionId
         ):
-        final platform = source == 'app_store' ? 'ios' : 'android';
+        // The API expects the store name: apple / google.
+        final platform = source == 'app_store' ? 'apple' : 'google';
         final res = await sl<WalletRepository>().verifyIap(
-          creditPackageId: package.id,
           platform: platform,
-          receipt: verificationData,
           productId: productId,
+          receiptData: platform == 'apple' ? verificationData : null,
+          purchaseToken: platform == 'google' ? verificationData : null,
           transactionId: transactionId,
         );
         if (!context.mounted) return;

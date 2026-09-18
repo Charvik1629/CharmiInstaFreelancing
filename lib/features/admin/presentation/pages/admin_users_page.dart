@@ -341,7 +341,7 @@ class _AdjustCreditsDialogState extends State<_AdjustCreditsDialog> {
               AppTextField(
                 controller: _amount,
                 label: 'Amount (credits)',
-                hint: '100',
+                hint: 'Enter amount',
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
@@ -349,7 +349,7 @@ class _AdjustCreditsDialogState extends State<_AdjustCreditsDialog> {
               AppTextField(
                 controller: _note,
                 label: 'Note (optional)',
-                hint: 'Reason for the adjustment',
+                hint: 'Enter reason',
               ),
               const SizedBox(height: AppSpacing.xl),
               Row(
