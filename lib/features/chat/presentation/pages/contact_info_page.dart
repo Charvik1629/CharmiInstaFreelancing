@@ -104,6 +104,9 @@ class ContactInfoPage extends StatelessWidget {
                           Tab(text: 'Docs (${docs.length})'),
                         ],
                       ),
+                      // Rebuild the pinned tab bar when the counts change (they
+                      // grow as history auto-pages in) — otherwise it froze at 0.
+                      signature: '${media.length}-${links.length}-${docs.length}',
                     ),
                   ),
                 ],
@@ -304,8 +307,11 @@ class _EmptyTab extends StatelessWidget {
 }
 
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
-  _TabBarDelegate(this.tabBar);
+  _TabBarDelegate(this.tabBar, {this.signature = ''});
   final TabBar tabBar;
+
+  /// Changes whenever the tab counts change, so the pinned header rebuilds.
+  final String signature;
 
   @override
   double get minExtent => 48;
@@ -318,5 +324,6 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(_TabBarDelegate oldDelegate) =>
+      oldDelegate.signature != signature;
 }
