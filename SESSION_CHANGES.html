@@ -121,6 +121,34 @@
     <tr><td class="num">41</td><td>Re-checked "missing" APIs vs live docs</td><td><span class="badge b-done">DONE</span></td><td>Correction: <strong>Broadcast groups</strong> now exists as a full <code>/groups</code> module (members, join-requests, recommended); <strong>broadcast free-limits</strong> live under <code>GET/PUT /admin/wallet/settings</code>. Both moved out of "missing". See QUESTIONS.md.</td></tr>
   </table>
 
+  <h2>Chat batch 2 + attachments + link previews</h2>
+  <table>
+    <tr><th class="num">#</th><th>Item</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">61</td><td>Unread count not clearing after opening a chat</td><td><span class="badge b-done">DONE</span></td><td>Opening a chat marks it read and now clears the row's badge (inbox refreshes on return) <em>and</em> the bottom-nav dot (global unread re-fetched). 1:1 &amp; group.</td></tr>
+    <tr><td class="num">62</td><td>1:1 chat "i" info icon missing</td><td><span class="badge b-done">DONE</span></td><td>Added the info icon to the direct-chat header (opens Contact info).</td></tr>
+    <tr><td class="num">63</td><td>Attachment has no download</td><td><span class="badge b-done">DONE</span></td><td>File attachments are now tappable with a download icon — opens/downloads via the system handler (added <code>url_launcher</code>).</td></tr>
+    <tr><td class="num">64</td><td>Multi-file attachments + all types</td><td><span class="badge b-done">DONE</span></td><td>Send up to <strong>5 files</strong> in one message — images/video/audio/docs/archives via Document (multi-select), and multiple photos from the gallery. Sent as <code>attachments[]</code>.</td></tr>
+    <tr><td class="num">65</td><td>Link previews</td><td><span class="badge b-done">DONE</span></td><td>New <code>POST /link-previews</code> wired: messages containing a URL now render a WhatsApp-style preview card (image/title/description/site), tappable. In-memory + 6h backend cache.</td></tr>
+    <tr><td class="num">66</td><td>APK size optimization</td><td><span class="badge b-done">DONE</span></td><td>Release build with <code>--split-per-abi</code> → per-CPU APKs (~⅓ the 69 MB universal; arm64 ≈ 25 MB). For the Play Store, an <code>.aab</code> app bundle is smaller still.</td></tr>
+    <tr><td class="num">67</td><td>Presence (online/last-seen) not showing</td><td><span class="badge b-partial">PARTIAL</span></td><td>Wired (<code>presence:check</code> ack + <code>presence:update</code>); needs live-socket verification on device — the <code>presence:check</code> ack format / peer id resolution is the likely gap.</td></tr>
+    <tr><td class="num">68</td><td>Group realtime (added-to-group, membership)</td><td><span class="badge b-partial">PARTIAL</span></td><td>Being added creates a group chat → <code>conversation:created</code> already refreshes the inbox. The dedicated <code>group:membership</code> event + an OS notification still need FCM (blocked).</td></tr>
+    <tr><td class="num">69</td><td>Push notifications (1:1/group/added-to-group)</td><td><span class="badge b-blocked">BLOCKED</span></td><td>OS push needs <strong>Firebase</strong> (FCM) — the toolchain-blocked item (row 13). In-app live updates work over the socket; OS notifications can't fire until Firebase builds.</td></tr>
+    <tr><td class="num">70</td><td>Profile media/links/docs counts = 0</td><td><span class="badge b-partial">PARTIAL</span></td><td>Counts are derived from the loaded message window on the Contact-info screen; accurate all-time counts need a backend shared-media endpoint (none in the docs) or full pagination.</td></tr>
+  </table>
+
+  <h2>Spec batch (re-verify) — 2026-09-22</h2>
+  <table>
+    <tr><th class="num">#</th><th>Item</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">71</td><td>1A · Group suggestions + Request-to-join</td><td><span class="badge b-done">DONE</span></td><td>Already present: <strong>Chats → groups icon → Groups</strong> shows a <strong>Recommended</strong> section with a <strong>Request to join</strong> action per group (wired to <code>/groups/recommended</code> + <code>/groups/{id}/join-requests</code>).</td></tr>
+    <tr><td class="num">72</td><td>1B · Group chat "i" info icon</td><td><span class="badge b-done">DONE</span></td><td>Added the info icon to the <strong>group</strong> chat header too (parses <code>group_id</code>, fetches the group, opens Group details). Direct chats keep Contact info.</td></tr>
+    <tr><td class="num">73</td><td>1C · Full-screen image viewer + download</td><td><span class="badge b-done">DONE</span></td><td>Tapping a chat image opens a black full-screen <code>InteractiveViewer</code> (pinch-zoom) with a Download action. (Native "save to gallery" would need a gallery-saver plugin; download opens/saves via the system handler for now.)</td></tr>
+    <tr><td class="num">74</td><td>1D · Media/Links/Docs counts = 0</td><td><span class="badge b-partial">DONE (recent)</span></td><td>Contact-info now auto-pages recent history (up to 300 msgs) so the counts reflect real shared media/links/docs, not just the first window. Fully accurate all-time counts still want a backend media endpoint.</td></tr>
+    <tr><td class="num">75</td><td>2A · Real-time group-added</td><td><span class="badge b-done">DONE</span></td><td>Socket now handles <code>group:added</code> + <code>group:membership</code> → refreshes the inbox live (new group chat appears without reopening).</td></tr>
+    <tr><td class="num">76</td><td>2B · Chat push (FCM)</td><td><span class="badge b-blocked">via OneSignal</span></td><td>Native FCM is toolchain-blocked; OneSignal is wired (row 76 earlier) and just needs the App ID + backend to send. In-app realtime already works over the socket.</td></tr>
+    <tr><td class="num">77</td><td>3A · Attachment last-message preview</td><td><span class="badge b-done">DONE</span></td><td>Inbox preview now shows <strong>📷 Photo · 🎥 Video · 🎙️ Voice · 📄 Document</strong> (with a <code>+n</code> for multi-file) instead of a generic "Attachment". Unread red-dot/count is server-driven via the socket.</td></tr>
+    <tr><td class="num">78</td><td>4A · Presence lifecycle (online/away)</td><td><span class="badge b-done">DONE</span></td><td>Added a <code>WidgetsBindingObserver</code> at the app root → emits <code>presence:resume</code> on foreground and <code>presence:away</code> on background, so peers see accurate Online / last-seen.</td></tr>
+  </table>
+
   <h2>Now unblocked by updated API docs — queued</h2>
   <table>
     <tr><th class="num">#</th><th>Feature</th><th>Status</th><th>Endpoints</th></tr>
@@ -131,6 +159,44 @@
     <tr><td class="num">26</td><td>Stories module</td><td><span class="badge b-info">INFO</span></td><td>Skipped for now, per your note.</td></tr>
   </table>
 
-  <p class="note" style="margin-top:22px">Open decisions live in <code>QUESTIONS.md</code>. Backend still needs: <code>/broadcast-groups</code>, multi-media on posts, suggested-creators/follow, post-location field, broadcast free-limit settings.</p>
+  <h2>UI/UX overhaul + functional batch — 2026-09-22</h2>
+  <table>
+    <tr><th class="num">#</th><th>Item</th><th>Status</th><th>Notes</th></tr>
+    <tr><td class="num">79</td><td>1A · AdMob placement (Home vs Business)</td><td><span class="badge b-done">DONE</span></td><td>Ads <strong>removed from the Home feed</strong> entirely (no more interleaving) and kept only on the <strong>Business</strong> feed, per design.</td></tr>
+    <tr><td class="num">80</td><td>1B · Ad freeze / layout overflow</td><td><span class="badge b-done">DONE</span></td><td>Ad slot now renders at a <strong>fixed height</strong> (native 320 / banner 250) with the platform <code>AdWidget</code> given explicit bounds — the min/max range was making the native template loop &amp; freeze. Loading/failed collapse to zero height (no shift).</td></tr>
+    <tr><td class="num">81</td><td>2A · Home tab re-tap → refresh + scroll top</td><td><span class="badge b-done">DONE</span></td><td>Tapping <strong>Home</strong> while already on it animates to the top and refreshes the feed (shell → <code>ValueNotifier</code> reselect signal).</td></tr>
+    <tr><td class="num">82</td><td>2B · Business feed refresh after posting</td><td><span class="badge b-done">DONE</span></td><td>Creating a business post now <strong>reloads</strong> the Business feed; Business tab re-tap also refreshes + scrolls to top.</td></tr>
+    <tr><td class="num">83</td><td>3A · Post actions on cards (Ask / Share / Offer)</td><td><span class="badge b-done">DONE</span></td><td>Feed cards now carry <strong>Ask</strong> + <strong>Share</strong> (and Make-an-offer when allowed) alongside the primary CTA — no longer detail-only.</td></tr>
+    <tr><td class="num">84</td><td>3B · Dynamic "Direct Message" vs "Request this post"</td><td><span class="badge b-done">DONE</span></td><td>When a chat already exists for a post (<code>conversation_id</code>), the CTA becomes <strong>Direct Message</strong> (opens the thread); otherwise <strong>Request this post</strong> / <strong>Requested</strong>.</td></tr>
+    <tr><td class="num">85</td><td>3C · Hide Report on own posts</td><td><span class="badge b-done">DONE</span></td><td>Report only appears for non-owners (<code>is_own</code> branch); the owner sees Edit/Boost/Mark-sold/Delete instead.</td></tr>
+    <tr><td class="num">86</td><td>3D · Native share</td><td><span class="badge b-done">DONE</span></td><td>Share opens the OS share sheet (<code>share_plus</code>) from the card and detail.</td></tr>
+    <tr><td class="num">87</td><td>4A · Button label truncation</td><td><span class="badge b-done">DONE</span></td><td><code>AppButton</code> now wraps its label in a <code>FittedBox(scaleDown)</code> — "Mark as sold" / "Boost post" / "Mark reviewed" no longer clip on narrow side-by-side buttons.</td></tr>
+    <tr><td class="num">88</td><td>4B · Keyboard covers sheet fields</td><td><span class="badge b-done">DONE</span></td><td>All bottom-sheets (Ask, Make offer, Boost…) now add the keyboard inset to their padding, so the field stays visible while typing.</td></tr>
+    <tr><td class="num">89</td><td>5A · Search bar styling</td><td><span class="badge b-done">DONE</span></td><td>Pill search field with no box-in-a-box focus border; clear (✕) button.</td></tr>
+    <tr><td class="num">90</td><td>5B · Profile navigation from search</td><td><span class="badge b-done">DONE</span></td><td>Tapping a result opens a peek sheet → <strong>View profile</strong> (<code>userProfile</code>) or <strong>Message</strong>.</td></tr>
+    <tr><td class="num">91</td><td>6 · Edit post pre-fill</td><td><span class="badge b-done">DONE</span></td><td>The composer's content field is now seeded from the edited post (was blank because the field had no controller). Category + title pre-fill; on submit it <code>updateLoad</code>s.</td></tr>
+    <tr><td class="num">92</td><td>7A · Real-time Ask notification</td><td><span class="badge b-done">DONE</span></td><td>Socket handles <code>notification:new</code> → live in-app toast in the shell, and refreshes the questions unread badge. OS push (background) rides OneSignal.</td></tr>
+    <tr><td class="num">93</td><td>7B · Ask button visibility for new users</td><td><span class="badge b-done">DONE</span></td><td>Ask now lives on the feed card (server <code>can_ask_question</code>), so newcomers can ask straight from the feed, not just detail.</td></tr>
+    <tr><td class="num">94</td><td>8A · Admin reported-posts notification</td><td><span class="badge b-partial">via realtime/push</span></td><td>New reports reach admins through the same <code>notification:new</code> toast + OneSignal push; backend must emit/target admins.</td></tr>
+    <tr><td class="num">95</td><td>8B · Admin reported-posts management UI</td><td><span class="badge b-done">DONE</span></td><td>Settings → <strong>Reported posts</strong> (admin-gated): Pending / Reviewed / Dismissed tabs with per-report <strong>Mark reviewed</strong> / <strong>Dismiss</strong>, wired to <code>/admin/reports</code>.</td></tr>
+  </table>
+
+  </table>
+
+  <h2>Live device verification + socket-contract fixes — 2026-09-22</h2>
+  <p class="note">Verified on a real device (OPPO CPH2871) against the live backend, logged in as <em>Dharmemendra Kakde</em>. Checking <code>GET /realtime/config</code> revealed the backend emits <strong>only</strong> <code>message:new</code>, <code>unread:update</code>, <code>conversation:created</code> — so three of my socket assumptions were wrong and are now corrected.</p>
+  <table>
+    <tr><th class="num">#</th><th>Finding (live)</th><th>Status</th><th>Fix</th></tr>
+    <tr><td class="num">96</td><td>Login persists across app update</td><td><span class="badge b-done">VERIFIED</span></td><td><code>auth/me</code> → 200 after in-place install (release signed with debug key). No re-login.</td></tr>
+    <tr><td class="num">97</td><td>Socket connects live</td><td><span class="badge b-done">VERIFIED</span></td><td><code>NEXVEERO-SOCKET ✓ connected</code>; chats/questions/unread/feed all return real data.</td></tr>
+    <tr><td class="num">98</td><td>Presence: 25s <code>presence:ping</code> heartbeat was MISSING</td><td><span class="badge b-done">FIXED + VERIFIED</span></td><td>Added a heartbeat (ping on connect, then every 25s). Without it the server marked us offline after 60s. Verified: pings at :52, :17, :42 — exact 25s.</td></tr>
+    <tr><td class="num">99</td><td>Presence: background→away, foreground→resume</td><td><span class="badge b-done">VERIFIED</span></td><td>HOME → <code>emit presence:away</code> (peer sees last seen); reopen → <code>emit presence:resume</code> + socket reconnect. Heartbeat stops on away, restarts on resume.</td></tr>
+    <tr><td class="num">100</td><td>Peer presence never updated after first load</td><td><span class="badge b-done">FIXED</span></td><td>Backend has no <code>presence:update</code> push — switched the chat header to <strong>poll</strong> <code>presence:check</code> every 20s (was relying on a push that never fires).</td></tr>
+    <tr><td class="num">101</td><td>7A/8A used a non-existent <code>notification:new</code></td><td><span class="badge b-done">FIXED</span></td><td>Backend never emits it. Rewired the live "new question / new offer" toast to the real <code>conversation:created</code> event (type question/offer) + <code>unread:update</code> badge. (Kept a <code>notification:new</code> listener as harmless forward-compat.)</td></tr>
+    <tr><td class="num">102</td><td>Group-added realtime</td><td><span class="badge b-done">OK</span></td><td>Confirmed correct: being added to a group arrives as <code>conversation:created</code> (already handled) — no separate group event exists.</td></tr>
+    <tr><td class="num">103</td><td>Admin reported-posts UI on this device</td><td><span class="badge b-info">N/A here</span></td><td>Test account roles=[user]; needs an <strong>admin login</strong> to exercise the moderation screen live.</td></tr>
+  </table>
+
+  <p class="note" style="margin-top:22px">Open decisions live in <code>QUESTIONS.md</code>. Backend still needs: <code>/broadcast-groups</code>, multi-media on posts, suggested-creators/follow, post-location field, broadcast free-limit settings. OS push (background/killed) still needs the <strong>OneSignal App ID</strong> in <code>lib/core/config/onesignal_config.dart</code> + backend send; in-app realtime is fully wired and verified.</p>
 </body>
 </html>

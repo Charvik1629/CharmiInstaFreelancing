@@ -3,6 +3,7 @@ import 'package:get_it/get_it.dart';
 
 import '../network/api_client.dart';
 import '../push/push_service.dart';
+import '../link_preview/link_preview_service.dart';
 import '../realtime/socket_service.dart';
 import '../network/network_info.dart';
 import '../permissions/permission_manager.dart';
@@ -145,6 +146,8 @@ void registerFeatureDependencies() {
   // Single app-wide session cubit (shared by the router guard and the UI).
   sl.registerSingleton<AuthCubit>(AuthCubit(sl<AuthRepository>()));
   sl.registerLazySingleton<PushService>(() => PushService(sl<ApiClient>()));
+  sl.registerLazySingleton<LinkPreviewService>(
+      () => LinkPreviewService(sl<ApiClient>()));
   sl.registerLazySingleton<SocketService>(
       () => SocketService(sl<ApiClient>(), sl<StorageManager>()));
   // Fresh form cubits per page mount.

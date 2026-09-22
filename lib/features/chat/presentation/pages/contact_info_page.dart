@@ -62,7 +62,20 @@ class ContactInfoPage extends StatelessWidget {
                 ),
             ],
           ),
-          body: BlocBuilder<ConversationCubit, ConversationState>(
+          body: BlocConsumer<ConversationCubit, ConversationState>(
+            // Auto-page through recent history so the Media/Links/Docs counts
+            // reflect more than the first message window (capped to stay light).
+            listenWhen: (p, c) =>
+                p.messages.length != c.messages.length ||
+                p.isLoadingMore != c.isLoadingMore,
+            listener: (context, state) {
+              if (state.status == ThreadStatus.loaded &&
+                  state.hasMore &&
+                  !state.isLoadingMore &&
+                  state.messages.length < 300) {
+                context.read<ConversationCubit>().loadMore();
+              }
+            },
             builder: (context, state) {
               final msgs = state.messages;
               final media = msgs

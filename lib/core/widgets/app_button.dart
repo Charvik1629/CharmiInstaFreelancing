@@ -71,13 +71,21 @@ class _Content extends StatelessWidget {
       );
     }
     final style = Theme.of(context).textTheme.titleMedium;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: AppSpacing.sm)],
-        Flexible(child: Text(label, style: style, overflow: TextOverflow.ellipsis)),
-      ],
+    // Scale the label down to fit narrow (side-by-side) buttons instead of
+    // clipping it — e.g. "Mark as sold" / "Boost post" no longer truncate.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 20),
+            const SizedBox(width: AppSpacing.sm)
+          ],
+          Text(label, style: style, maxLines: 1, softWrap: false),
+        ],
+      ),
     );
   }
 }

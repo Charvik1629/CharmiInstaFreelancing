@@ -38,10 +38,10 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
     required int id,
     required ConversationType type,
     String body = '',
-    String? imagePath,
+    List<String> attachmentPaths = const [],
   }) =>
       guard(() => _remote.sendMessage(
-          id: id, type: type, body: body, imagePath: imagePath));
+          id: id, type: type, body: body, attachmentPaths: attachmentPaths));
 
   @override
   Future<Result<ChatMessage>> editMessage(

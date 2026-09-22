@@ -237,7 +237,7 @@ void main() {
               id: 12,
               type: ConversationType.direct,
               body: '',
-              imagePath: '/tmp/pic.jpg'))
+              attachmentPaths: const ['/tmp/pic.jpg']))
           .thenAnswer((_) async => Success(_msg(3, sender: 2)));
 
       final cubit = ConversationCubit(repo, direct, meId: 2);
@@ -249,7 +249,7 @@ void main() {
           id: 12,
           type: ConversationType.direct,
           body: '',
-          imagePath: '/tmp/pic.jpg')).called(1);
+          attachmentPaths: const ['/tmp/pic.jpg'])).called(1);
     });
 
     test('loadMore prepends older messages', () async {

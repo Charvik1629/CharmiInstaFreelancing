@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/constants/ad_config.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/models/load.dart';
@@ -14,28 +15,34 @@ import '../../../chat/domain/entities/conversation.dart';
 import '../../../offers/presentation/widgets/make_offer_sheet.dart';
 import '../../../wallet/domain/repositories/wallet_repository.dart';
 import '../cubit/feed_cubit.dart';
+import '../widgets/ask_question_sheet.dart';
 import '../widgets/boost_confirm_dialog.dart';
 import '../widgets/request_success_sheet.dart';
-import '../widgets/feed_ad_slot.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
 
 /// The home feed. Lists posts (loads) with filters, pull-to-refresh and
 /// infinite scroll, and handles the per-post actions.
 class FeedPage extends StatelessWidget {
-  const FeedPage({super.key});
+  const FeedPage({super.key, this.reselect});
+
+  /// Bumped by the shell when the Home tab is tapped while already active →
+  /// refresh + scroll to top.
+  final ValueListenable<int>? reselect;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => sl<FeedCubit>()..load(),
-      child: const _FeedView(),
+      child: _FeedView(reselect: reselect),
     );
   }
 }
 
 class _FeedView extends StatefulWidget {
-  const _FeedView();
+  const _FeedView({this.reselect});
+
+  final ValueListenable<int>? reselect;
 
   @override
   State<_FeedView> createState() => _FeedViewState();
@@ -48,6 +55,7 @@ class _FeedViewState extends State<_FeedView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    widget.reselect?.addListener(_onReselect);
   }
 
   void _onScroll() {
@@ -57,8 +65,19 @@ class _FeedViewState extends State<_FeedView> {
     }
   }
 
+  /// Home tab re-tapped: jump to top, then refresh the feed.
+  void _onReselect() {
+    if (!mounted) return;
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+    context.read<FeedCubit>().refresh();
+  }
+
   @override
   void dispose() {
+    widget.reselect?.removeListener(_onReselect);
     _scrollController.dispose();
     super.dispose();
   }
@@ -99,6 +118,41 @@ class _FeedViewState extends State<_FeedView> {
         type: ConversationType.direct,
         title: load.author?.name ?? 'Chat',
         avatarUrl: load.author?.avatarUrl,
+      ),
+    );
+  }
+
+  Future<void> _ask(Load load) async {
+    final body = await AskQuestionSheet.show(context, subtitle: load.title);
+    if (body == null || body.isEmpty || !mounted) return;
+    final result = await context.read<FeedCubit>().ask(load, body);
+    if (!mounted) return;
+    AppOverlays.snack(context,
+        result.isSuccess ? 'Question sent' : 'Could not send question');
+  }
+
+  Future<void> _share(Load load) async {
+    final by = load.author?.name;
+    final text = [
+      load.title,
+      if (by != null) 'by $by',
+      'on Nexveero',
+    ].join(' ');
+    await SharePlus.instance.share(ShareParams(text: text));
+  }
+
+  /// Opens the existing 1:1 chat for a post the viewer already requested.
+  void _directMessage(Load load) {
+    final id = load.conversationId;
+    if (id == null) return;
+    context.push(
+      AppRoutes.chatThread,
+      extra: Conversation(
+        id: id,
+        type: ConversationType.direct,
+        title: load.author?.name ?? 'Chat',
+        avatarUrl: load.author?.avatarUrl,
+        peerId: load.author?.id,
       ),
     );
   }
@@ -205,6 +259,9 @@ class _FeedViewState extends State<_FeedView> {
                 onOffer: _offer,
                 onBoost: _boost,
                 onMarkSold: _markSold,
+                onAsk: _ask,
+                onShare: _share,
+                onDirectMessage: _directMessage,
               ),
             ),
           ),
@@ -252,6 +309,9 @@ class _FeedBody extends StatelessWidget {
     required this.onOffer,
     required this.onBoost,
     required this.onMarkSold,
+    required this.onAsk,
+    required this.onShare,
+    required this.onDirectMessage,
   });
 
   final FeedState state;
@@ -262,6 +322,9 @@ class _FeedBody extends StatelessWidget {
   final ValueChanged<Load> onOffer;
   final ValueChanged<Load> onBoost;
   final ValueChanged<Load> onMarkSold;
+  final ValueChanged<Load> onAsk;
+  final ValueChanged<Load> onShare;
+  final ValueChanged<Load> onDirectMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -289,28 +352,21 @@ class _FeedBody extends StatelessWidget {
           ),
         );
       case FeedStatus.loaded:
-        // Interleave an ad after every AdConfig.postsBetweenAds posts. This is a
-        // pure view-layer concern: FeedCubit holds only posts, so pagination and
-        // pull-to-refresh stay unaffected by ads.
-        final entries = _buildEntries(state.loads);
+        // No ads on the Home feed — AdMob is restricted to the Business feed.
         return RefreshIndicator(
           onRefresh: () => context.read<FeedCubit>().refresh(),
           child: ListView.builder(
             controller: scrollController,
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            itemCount: entries.length + (state.isLoadingMore ? 1 : 0),
+            itemCount: state.loads.length + (state.isLoadingMore ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index >= entries.length) {
+              if (index >= state.loads.length) {
                 return const Padding(
                   padding: EdgeInsets.all(AppSpacing.lg),
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-              final entry = entries[index];
-              if (entry is _AdEntry) {
-                return FeedAdSlot(key: ValueKey('ad_${entry.slot}'));
-              }
-              final load = (entry as _PostEntry).load;
+              final load = state.loads[index];
               return PostCard(
                 key: ValueKey('post_${load.id}'),
                 load: load,
@@ -318,6 +374,9 @@ class _FeedBody extends StatelessWidget {
                 onReport: () => onReport(load),
                 onDelete: () => onDelete(load),
                 onOffer: () => onOffer(load),
+                onAsk: () => onAsk(load),
+                onShare: () => onShare(load),
+                onDirectMessage: () => onDirectMessage(load),
                 onTap: () => context.push(AppRoutes.postDetail, extra: load),
                 onBoost: () => onBoost(load),
                 onMarkSold: () => onMarkSold(load),
@@ -344,36 +403,3 @@ class _GradientWordmark extends StatelessWidget {
   }
 }
 
-/// A row in the feed list: either a post or an injected ad slot.
-sealed class _FeedEntry {
-  const _FeedEntry();
-}
-
-class _PostEntry extends _FeedEntry {
-  const _PostEntry(this.load);
-  final Load load;
-}
-
-class _AdEntry extends _FeedEntry {
-  const _AdEntry(this.slot);
-  final int slot;
-}
-
-/// Builds the interleaved list: one ad after every [AdConfig.postsBetweenAds]
-/// posts, but never before [AdConfig.minPostsBeforeFirstAd] posts are shown.
-/// A trailing ad is not appended after the final partial group.
-List<_FeedEntry> _buildEntries(List<Load> loads) {
-  final entries = <_FeedEntry>[];
-  final n = AdConfig.postsBetweenAds;
-  for (var i = 0; i < loads.length; i++) {
-    entries.add(_PostEntry(loads[i]));
-    final postsShown = i + 1;
-    final isGroupEnd = postsShown % n == 0;
-    final pastFirstAdFloor = postsShown >= AdConfig.minPostsBeforeFirstAd;
-    final hasMorePosts = i < loads.length - 1;
-    if (isGroupEnd && pastFirstAdFloor && hasMorePosts) {
-      entries.add(_AdEntry(i ~/ n));
-    }
-  }
-  return entries;
-}

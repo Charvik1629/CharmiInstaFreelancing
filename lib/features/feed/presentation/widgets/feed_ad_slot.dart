@@ -84,28 +84,32 @@ class _FeedAdSlotState extends State<FeedAdSlot> {
 
   @override
   Widget build(BuildContext context) {
+    // Failed or still loading → take no visible space so nothing shifts/overlaps.
     if (_failed) return const SizedBox.shrink();
+    final nativeReady = _nativeLoaded && _native != null;
+    final bannerReady = _bannerLoaded && _banner != null;
+    if (!nativeReady && !bannerReady) return const SizedBox.shrink();
 
-    final Widget? adView = _nativeLoaded && _native != null
-        ? AdWidget(ad: _native!)
-        : (_bannerLoaded && _banner != null ? AdWidget(ad: _banner!) : null);
+    // A loaded ad renders at a FIXED height so the platform view (AdWidget) has
+    // explicit bounds — min/max ranges make the native template loop and freeze.
+    final isBanner = bannerReady && !nativeReady;
+    final double height = isBanner ? 250 : 320;
 
-    if (adView == null) return const SizedBox(height: 8); // quiet while loading
-
-    final isBanner = _bannerLoaded && !_nativeLoaded;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-      constraints: isBanner
-          ? const BoxConstraints(minHeight: 250, maxHeight: 300)
-          : const BoxConstraints(minHeight: 320, maxHeight: 360),
+      margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      height: height,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: context.nexveero.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: isBanner
-          ? Center(child: SizedBox(width: 300, height: 250, child: adView))
-          : adView,
+          ? Center(
+              child: SizedBox(
+                  width: 300, height: 250, child: AdWidget(ad: _banner!)))
+          : SizedBox(
+              height: height, width: double.infinity, child: AdWidget(ad: _native!)),
     );
   }
 }

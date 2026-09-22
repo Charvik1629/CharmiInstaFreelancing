@@ -10,6 +10,7 @@ import '../../../../core/utils/result.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/repositories/chat_repository.dart';
+import 'unread_cubit.dart';
 
 part 'conversation_state.dart';
 
@@ -30,6 +31,7 @@ class ConversationCubit extends Cubit<ConversationState> {
   StreamSubscription<ReadEvent>? _readSub;
   StreamSubscription<PresenceEvent>? _presenceSub;
   Timer? _typingClear;
+  Timer? _presenceTimer;
 
   bool get canSend => conversation.canChat;
 
@@ -74,21 +76,32 @@ class ConversationCubit extends Cubit<ConversationState> {
         emit(state.copyWith(peerLastReadAt: r.lastReadAt));
       }
     });
-    // Peer online / last-seen (direct chats): seed once, then track live.
+    // Peer online / last-seen (direct chats). The backend does NOT push
+    // presence changes (server_events has no presence:update), so we POLL with
+    // `presence:check` on open and every 20s while the thread is open — matching
+    // the server's 25s ping / 60s timeout model.
     final peerId = conversation.peerId;
     if (peerId != null && conversation.type == ConversationType.direct) {
-      socket.checkPresence([peerId]).then((map) {
-        final info = map[peerId];
-        if (info != null && !isClosed) {
-          emit(state.copyWith(
-              peerOnline: info.isOnline, peerLastSeen: info.lastSeenAt));
-        }
-      });
+      _pollPresence(peerId);
+      _presenceTimer = Timer.periodic(
+          const Duration(seconds: 20), (_) => _pollPresence(peerId));
+      // Also honour a push presence:update if the backend ever adds one.
       _presenceSub = socket.presenceEvents
           .where((p) => p.userId == peerId)
           .listen((p) => emit(state.copyWith(
               peerOnline: p.isOnline, peerLastSeen: p.lastSeenAt)));
     }
+  }
+
+  void _pollPresence(int peerId) {
+    if (!sl.isRegistered<SocketService>()) return;
+    sl<SocketService>().checkPresence([peerId]).then((map) {
+      final info = map[peerId];
+      if (info != null && !isClosed) {
+        emit(state.copyWith(
+            peerOnline: info.isOnline, peerLastSeen: info.lastSeenAt));
+      }
+    });
   }
 
   Timer? _typingEmitStop;
@@ -157,6 +170,7 @@ class ConversationCubit extends Cubit<ConversationState> {
     _typingSub?.cancel();
     _readSub?.cancel();
     _presenceSub?.cancel();
+    _presenceTimer?.cancel();
     _typingClear?.cancel();
     _typingEmitStop?.cancel();
     return super.close();
@@ -209,24 +223,32 @@ class ConversationCubit extends Cubit<ConversationState> {
 
   /// Sends an image attachment (with optional caption).
   Future<void> sendImage(String imagePath, {String caption = ''}) =>
-      _send(body: caption.trim(), imagePath: imagePath);
+      _send(body: caption.trim(), attachmentPaths: [imagePath]);
 
   /// Sends any file attachment — video or document (with optional caption). The
   /// server infers the kind (image|video|audio|file) from the file's mime type.
   Future<void> sendAttachment(String path, {String caption = ''}) =>
-      _send(body: caption.trim(), imagePath: path);
+      _send(body: caption.trim(), attachmentPaths: [path]);
+
+  /// Sends multiple file attachments in one message (up to 5, per the API).
+  Future<void> sendAttachments(List<String> paths, {String caption = ''}) =>
+      _send(body: caption.trim(), attachmentPaths: paths.take(5).toList());
 
   /// Shared send path; on success appends the created message to the bottom.
-  Future<void> _send({String body = '', String? imagePath}) async {
-    final hasImage = imagePath != null && imagePath.isNotEmpty;
-    if ((body.isEmpty && !hasImage) || state.isSending || !canSend) return;
+  Future<void> _send(
+      {String body = '', List<String> attachmentPaths = const []}) async {
+    if ((body.isEmpty && attachmentPaths.isEmpty) ||
+        state.isSending ||
+        !canSend) {
+      return;
+    }
     _stopTyping();
     emit(state.copyWith(isSending: true, clearError: true));
     final result = await _repository.sendMessage(
       id: conversation.id,
       type: conversation.type,
       body: body,
-      imagePath: imagePath,
+      attachmentPaths: attachmentPaths,
     );
     switch (result) {
       case Success(value: final message):
@@ -323,8 +345,14 @@ class ConversationCubit extends Cubit<ConversationState> {
   }
 
   void _markRead() {
-    if (conversation.type != ConversationType.broadcast) {
-      _repository.markRead(conversation.id);
-    }
+    if (conversation.type == ConversationType.broadcast) return;
+    _repository.markRead(conversation.id).then((_) async {
+      // Refresh the global unread badge so the bottom-nav dot clears too.
+      if (!sl.isRegistered<UnreadCubit>()) return;
+      final counts = await _repository.getUnreadCounts();
+      if (counts case Success(value: final c)) {
+        sl<UnreadCubit>().setCounts(c);
+      }
+    });
   }
 }

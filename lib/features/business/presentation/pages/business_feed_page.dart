@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -22,7 +23,11 @@ import '../widgets/business_post_card.dart';
 /// Google "Sponsored" ad cards interspersed. Header uses the gradient
 /// "Business" wordmark.
 class BusinessFeedPage extends StatelessWidget {
-  const BusinessFeedPage({super.key});
+  const BusinessFeedPage({super.key, this.reselect});
+
+  /// Bumped by the shell when the Business tab is tapped while already active →
+  /// refresh + scroll to top.
+  final ValueListenable<int>? reselect;
 
   /// Show one sponsored slot after every N business posts.
   static const int _postsBetweenAds = 2;
@@ -31,13 +36,15 @@ class BusinessFeedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => FeedCubit(sl<FeedRepository>(), fixedSlug: 'business')..load(),
-      child: const _BusinessFeedView(),
+      child: _BusinessFeedView(reselect: reselect),
     );
   }
 }
 
 class _BusinessFeedView extends StatefulWidget {
-  const _BusinessFeedView();
+  const _BusinessFeedView({this.reselect});
+
+  final ValueListenable<int>? reselect;
 
   @override
   State<_BusinessFeedView> createState() => _BusinessFeedViewState();
@@ -54,10 +61,31 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
         context.read<FeedCubit>().loadMore();
       }
     });
+    widget.reselect?.addListener(_onReselect);
+  }
+
+  /// Business tab re-tapped: jump to top, then refresh.
+  void _onReselect() {
+    if (!mounted) return;
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+    context.read<FeedCubit>().refresh();
+  }
+
+  /// Open the composer; on a successful publish, reload so the new post shows.
+  Future<void> _createPost() async {
+    final created = await context.push<Load>(AppRoutes.createPost);
+    if (created == null || !mounted) return;
+    await context.read<FeedCubit>().refresh();
+    if (!mounted) return;
+    AppOverlays.snack(context, 'Post published');
   }
 
   @override
   void dispose() {
+    widget.reselect?.removeListener(_onReselect);
     _scroll.dispose();
     super.dispose();
   }
@@ -106,7 +134,7 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
         leading: IconButton(
           icon: const Icon(Icons.add_box_outlined),
           tooltip: 'Create post',
-          onPressed: () => context.push(AppRoutes.createPost),
+          onPressed: _createPost,
         ),
         centerTitle: true,
         title: const _GradientWordmark('Business'),

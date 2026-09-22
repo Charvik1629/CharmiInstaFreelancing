@@ -64,6 +64,19 @@ class PresenceEvent {
   final DateTime? lastSeenAt;
 }
 
+/// A live in-app notification pushed over the socket (`notification:new`), e.g.
+/// someone asked a question on your post, sent an offer, etc.
+class NotificationEvent {
+  const NotificationEvent({this.type, this.title, this.body, this.loadId});
+  final String? type;
+  final String? title;
+  final String? body;
+  final int? loadId;
+
+  /// True when this is a "someone asked a question on your post" notification.
+  bool get isQuestion => type == 'question' || type == 'question_asked';
+}
+
 /// Socket.IO client for live chat + unread badges (design: realtime).
 /// Connects to the `socket_url` from `GET /realtime/config`, authenticating with
 /// the stored Sanctum token, and dispatches `message:new` / `unread:update`.
@@ -75,11 +88,18 @@ class SocketService {
   final StorageManager _storage;
 
   io.Socket? _socket;
+
+  /// Keeps our own presence "online": the server marks us offline after 60s
+  /// without a `presence:ping`, so we heartbeat every 25s while foregrounded
+  /// (per GET /realtime/config → presence.ping_interval_seconds).
+  Timer? _pingTimer;
+
   final _messages = StreamController<RealtimeMessage>.broadcast();
   final _conversationCreated = StreamController<void>.broadcast();
   final _typingEvents = StreamController<TypingEvent>.broadcast();
   final _readEvents = StreamController<ReadEvent>.broadcast();
   final _presenceEvents = StreamController<PresenceEvent>.broadcast();
+  final _notifications = StreamController<NotificationEvent>.broadcast();
 
   /// Broadcast of incoming messages; conversation screens filter by id.
   Stream<RealtimeMessage> get messages => _messages.stream;
@@ -96,6 +116,10 @@ class SocketService {
   /// Fires when a new conversation is created for the user (e.g. someone
   /// requests their post) — the inbox listens and refreshes.
   Stream<void> get conversationCreated => _conversationCreated.stream;
+
+  /// Live in-app notifications (from `notification:new`) — e.g. a new question
+  /// on your post. The notifications inbox + a global toast listen to this.
+  Stream<NotificationEvent> get notifications => _notifications.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -130,8 +154,14 @@ class SocketService {
       );
       _socket = socket;
 
-      socket.onConnect((_) => _log('✓ connected ($url)'));
-      socket.onDisconnect((r) => _log('✗ disconnected ($r)'));
+      socket.onConnect((_) {
+        _log('✓ connected ($url)');
+        _startHeartbeat();
+      });
+      socket.onDisconnect((r) {
+        _log('✗ disconnected ($r)');
+        _stopHeartbeat();
+      });
       socket.onConnectError((e) => _log('✗ connect error: $e'));
       socket.onError((e) => _log('✗ error: $e'));
       socket.on('message:new', _onMessage);
@@ -140,6 +170,11 @@ class SocketService {
       socket.on('typing:update', _onTyping);
       socket.on('message:read', _onRead);
       socket.on('presence:update', _onPresence);
+      // Added to / changed membership of a group → refresh the inbox live.
+      socket.on('group:added', _onGroupChange);
+      socket.on('group:membership', _onGroupChange);
+      // Live notifications (new question on a post, offers, …).
+      socket.on('notification:new', _onNotification);
       socket.connect();
     } catch (e) {
       _log('✗ connect failed: $e');
@@ -150,6 +185,40 @@ class SocketService {
   void joinConversation(int conversationId) {
     _log('emit conversation:join #$conversationId');
     _socket?.emit('conversation:join', {'conversation_id': conversationId});
+  }
+
+  /// App came to the foreground — tell the server we're back (online) and
+  /// resume the 25s heartbeat.
+  void presenceResume() {
+    _log('emit presence:resume');
+    _socket?.emit('presence:resume');
+    _startHeartbeat(); // ping now + every 25s
+  }
+
+  /// App backgrounded/inactive — tell the server we're away and stop pinging
+  /// (the server stamps last_seen_at and marks us offline).
+  void presenceAway() {
+    _log('emit presence:away');
+    _stopHeartbeat();
+    _socket?.emit('presence:away');
+  }
+
+  /// Starts the `presence:ping` heartbeat (immediately, then every 25s).
+  void _startHeartbeat() {
+    _pingTimer?.cancel();
+    _ping();
+    _pingTimer =
+        Timer.periodic(const Duration(seconds: 25), (_) => _ping());
+  }
+
+  void _stopHeartbeat() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
+  }
+
+  void _ping() {
+    _log('emit presence:ping');
+    _socket?.emit('presence:ping', {'active': true});
   }
 
   void typing(int conversationId, {required bool started}) {
@@ -186,6 +255,53 @@ class SocketService {
   void _onConversationCreated(dynamic data) {
     _log('event conversation:created');
     _conversationCreated.add(null);
+    // The backend has no `notification:new`; a new question/offer arrives as a
+    // freshly-created chat here. Surface a live toast for those.
+    if (data is! Map) return;
+    final json = Map<String, dynamic>.from(data);
+    final inner = json['conversation'] is Map
+        ? Map<String, dynamic>.from(json['conversation'] as Map)
+        : json;
+    final type = (inner['type'] ?? json['type']) as String?;
+    if (type == 'question' || type == 'offer') {
+      final who = (inner['subtitle'] ?? inner['title']) as String?;
+      _notifications.add(NotificationEvent(
+        type: type,
+        title: type == 'question'
+            ? 'New question${who != null ? ' from $who' : ''}'
+            : 'New offer${who != null ? ' from $who' : ''}',
+      ));
+    }
+  }
+
+  void _onGroupChange(dynamic data) {
+    _log('event group:membership/added');
+    // Reuse the conversation-created signal so the inbox re-fetches.
+    _conversationCreated.add(null);
+  }
+
+  void _onNotification(dynamic data) {
+    if (data is! Map) return;
+    final json = Map<String, dynamic>.from(data);
+    // Fields may be flat or nested under `notification`/`data`.
+    final inner = json['notification'] is Map
+        ? Map<String, dynamic>.from(json['notification'] as Map)
+        : (json['data'] is Map
+            ? Map<String, dynamic>.from(json['data'] as Map)
+            : json);
+    final event = NotificationEvent(
+      type: inner['type'] as String?,
+      title: inner['title'] as String?,
+      body: (inner['body'] ?? inner['message']) as String?,
+      loadId: (inner['load_id'] as num?)?.toInt(),
+    );
+    _log('event notification:new type=${event.type}');
+    _notifications.add(event);
+    // Keep the questions badge fresh when the server doesn't also push
+    // unread:update for it.
+    if (event.isQuestion && sl.isRegistered<UnreadCubit>()) {
+      sl<UnreadCubit>().refresh();
+    }
   }
 
   void _onTyping(dynamic data) {
@@ -270,6 +386,7 @@ class SocketService {
   }
 
   Future<void> disconnect() async {
+    _stopHeartbeat();
     _socket?.dispose();
     _socket = null;
   }

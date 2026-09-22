@@ -30,6 +30,7 @@ class Conversation extends Equatable {
     this.subtitle,
     this.avatarUrl,
     this.peerId,
+    this.groupId,
     this.lastMessage,
     this.lastMessageAt,
     this.unreadCount = 0,
@@ -50,6 +51,9 @@ class Conversation extends Equatable {
   /// The other user's id for a direct chat (used for block/profile). Null for
   /// groups and broadcasts.
   final int? peerId;
+
+  /// The group's id for a group conversation (opens Group details). Null otherwise.
+  final int? groupId;
 
   /// A short preview of the last message (already collapsed from body /
   /// attachment). Null when the thread has no messages yet.
@@ -78,6 +82,7 @@ class Conversation extends Equatable {
       avatarUrl: json.asString('avatar_url') ??
           json.asMap('peer')?.asString('avatar_url'),
       peerId: json.asMap('peer')?.asInt('id'),
+      groupId: json.asInt('group_id'),
       lastMessage: _preview(last),
       lastMessageAt: last?.asDate('created_at'),
       unreadCount: json.asIntOr('unread_count', 0),
@@ -136,7 +141,14 @@ class Conversation extends Equatable {
       final kind = attachments.first is Map
           ? (attachments.first as Map)['kind']
           : null;
-      return kind == 'image' ? '📷 Photo' : '📎 Attachment';
+      final more = attachments.length > 1 ? ' +${attachments.length - 1}' : '';
+      return switch (kind) {
+        'image' => '📷 Photo$more',
+        'video' => '🎥 Video$more',
+        'audio' => '🎙️ Voice$more',
+        'file' => '📄 Document$more',
+        _ => '📎 Attachment$more',
+      };
     }
     return null;
   }
@@ -149,6 +161,7 @@ class Conversation extends Equatable {
         subtitle,
         avatarUrl,
         peerId,
+        groupId,
         lastMessage,
         lastMessageAt,
         unreadCount,

@@ -154,7 +154,14 @@ class AppOverlays {
       isScrollControlled: isScrollControlled,
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          // Lift the sheet above the on-screen keyboard so text fields inside it
+          // (Ask a question, Make an offer, …) stay visible while typing.
+          padding: EdgeInsets.only(
+            left: AppSpacing.lg,
+            right: AppSpacing.lg,
+            top: AppSpacing.lg,
+            bottom: AppSpacing.lg + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

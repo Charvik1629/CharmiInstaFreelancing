@@ -294,7 +294,13 @@ class _ConversationTile extends StatelessWidget {
             ),
         ],
       ),
-      onTap: () => context.push(AppRoutes.chatThread, extra: c),
+      onTap: () async {
+        final cubit = context.read<ChatListCubit>();
+        await context.push(AppRoutes.chatThread, extra: c);
+        // Returning from a thread: the messages were marked read, so refresh
+        // the inbox to clear this row's unread badge.
+        await cubit.refresh();
+      },
     );
   }
 }

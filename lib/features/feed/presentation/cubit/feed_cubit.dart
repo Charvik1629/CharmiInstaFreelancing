@@ -101,6 +101,10 @@ class FeedCubit extends Cubit<FeedState> {
   Future<Result<void>> report(Load load, String reason) =>
       _repository.reportLoad(load.id, reason);
 
+  /// Asks a question about a post (POST /loads/{id}/questions).
+  Future<Result<void>> ask(Load load, String body) =>
+      _repository.askQuestion(load.id, body);
+
   /// Boosts an owned post. On success flips the card to "Boosted" in place
   /// (keeps the full card data rather than the partial boost response).
   Future<Result<Load>> boost(Load load) async {

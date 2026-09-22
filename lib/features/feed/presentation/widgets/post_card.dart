@@ -23,6 +23,9 @@ class PostCard extends StatelessWidget {
     this.onBoost,
     this.onMarkSold,
     this.onOffer,
+    this.onAsk,
+    this.onShare,
+    this.onDirectMessage,
     this.onTap,
   });
 
@@ -40,6 +43,16 @@ class PostCard extends StatelessWidget {
 
   /// Shown as a "Make offer" action when the load allows it (can_make_offer).
   final VoidCallback? onOffer;
+
+  /// Ask a question about the post (can_ask_question).
+  final VoidCallback? onAsk;
+
+  /// Share the post via the native share sheet.
+  final VoidCallback? onShare;
+
+  /// Opens the existing 1:1 chat when the viewer already has one for this post
+  /// (drives the "Direct Message" CTA instead of "Request this post").
+  final VoidCallback? onDirectMessage;
 
   /// Opens the post detail when the card body is tapped.
   final VoidCallback? onTap;
@@ -79,7 +92,14 @@ class PostCard extends StatelessWidget {
                   Text(load.body!, style: Theme.of(context).textTheme.bodyMedium),
                 ],
                 const SizedBox(height: AppSpacing.md),
-                _Actions(load: load, onRequest: onRequest, onOffer: onOffer),
+                _Actions(
+                  load: load,
+                  onRequest: onRequest,
+                  onOffer: onOffer,
+                  onAsk: onAsk,
+                  onShare: onShare,
+                  onDirectMessage: onDirectMessage,
+                ),
               ],
             ),
           ),
@@ -469,10 +489,20 @@ class _FileChip extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.load, required this.onRequest, this.onOffer});
+  const _Actions({
+    required this.load,
+    required this.onRequest,
+    this.onOffer,
+    this.onAsk,
+    this.onShare,
+    this.onDirectMessage,
+  });
   final Load load;
   final VoidCallback onRequest;
   final VoidCallback? onOffer;
+  final VoidCallback? onAsk;
+  final VoidCallback? onShare;
+  final VoidCallback? onDirectMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -484,6 +514,64 @@ class _Actions extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.nexveero.textSecondary)),
       );
     }
+
+    final canOffer = load.canMakeOffer && onOffer != null;
+    final canAsk = load.canAskQuestion && onAsk != null;
+
+    // Secondary actions available on every non-own post: Ask + Share.
+    final secondary = <Widget>[
+      if (canAsk)
+        Expanded(
+          child: AppButton(
+            label: 'Ask',
+            icon: Icons.help_outline,
+            variant: AppButtonVariant.outline,
+            onPressed: onAsk,
+          ),
+        ),
+      if (canAsk && onShare != null) const SizedBox(width: AppSpacing.sm),
+      if (onShare != null)
+        Expanded(
+          child: AppButton(
+            label: 'Share',
+            icon: Icons.share_outlined,
+            variant: AppButtonVariant.outline,
+            onPressed: onShare,
+          ),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _primaryCta(context),
+        if (secondary.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Row(children: secondary),
+        ],
+        if (canOffer) ...[
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            label: 'Make an offer',
+            icon: Icons.local_offer_outlined,
+            variant: AppButtonVariant.tonal,
+            onPressed: onOffer,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The primary CTA is dynamic: an existing chat → "Direct Message"; an
+  /// already-sent request → "Requested"; otherwise "Request this post".
+  Widget _primaryCta(BuildContext context) {
+    if (load.conversationId != null && onDirectMessage != null) {
+      return AppButton(
+        label: 'Direct Message',
+        icon: Icons.chat_bubble_outline,
+        onPressed: onDirectMessage,
+      );
+    }
     if (load.viewerHasRequested) {
       return const AppButton(
         label: 'Requested',
@@ -492,23 +580,11 @@ class _Actions extends StatelessWidget {
         onPressed: null,
       );
     }
-
-    // Design: the feed card carries a single full-width CTA. "Request this post"
-    // when messaging is allowed; otherwise "Make an offer" for offer-only posts.
-    // (Ask / Share / Offer / Report live on the Post Detail screen.)
-    final canOffer = load.canMakeOffer && onOffer != null;
     if (load.canMessage) {
       return AppButton(
           label: 'Request this post', icon: Icons.bolt, onPressed: onRequest);
     }
-    if (canOffer) {
-      return AppButton(
-        label: 'Make an offer',
-        icon: Icons.local_offer_outlined,
-        variant: AppButtonVariant.tonal,
-        onPressed: onOffer,
-      );
-    }
+    // Messaging not allowed and no chat yet — the offer button below stands in.
     return const SizedBox.shrink();
   }
 }

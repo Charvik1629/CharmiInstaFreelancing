@@ -3,6 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/link_preview/link_preview_service.dart';
+import '../widgets/link_preview_card.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
@@ -12,7 +16,9 @@ import '../../../../core/permissions/permission_flow.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../groups/domain/repositories/groups_repository.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
@@ -387,15 +393,27 @@ class _ThreadViewState extends State<_ThreadView> {
 
   Future<void> _pickImage(ImageSource source) async {
     final cubit = context.read<ConversationCubit>();
-    final permission =
-        source == ImageSource.camera ? AppPermission.camera : AppPermission.photos;
-    final outcome = await PermissionFlow.ensure(context, permission);
-    if (!outcome.isUsable) return;
     try {
-      final file =
-          await _picker.pickImage(source: source, maxWidth: 1600, imageQuality: 85);
-      if (file != null) cubit.sendImage(file.path, caption: _input.text.trim());
-      _input.clear();
+      if (source == ImageSource.gallery) {
+        // Photo Picker needs no permission; allows multiple (up to 5).
+        final files =
+            await _picker.pickMultiImage(maxWidth: 1600, imageQuality: 85);
+        final paths = files.map((f) => f.path).take(5).toList();
+        if (paths.isNotEmpty) {
+          cubit.sendAttachments(paths, caption: _input.text.trim());
+          _input.clear();
+        }
+      } else {
+        final outcome =
+            await PermissionFlow.ensure(context, AppPermission.camera);
+        if (!outcome.isUsable) return;
+        final file = await _picker.pickImage(
+            source: ImageSource.camera, maxWidth: 1600, imageQuality: 85);
+        if (file != null) {
+          cubit.sendImage(file.path, caption: _input.text.trim());
+          _input.clear();
+        }
+      }
     } catch (_) {
       if (mounted) AppOverlays.snack(context, 'Could not attach image');
     }
@@ -419,10 +437,12 @@ class _ThreadViewState extends State<_ThreadView> {
   Future<void> _pickDocument() async {
     final cubit = context.read<ConversationCubit>();
     try {
-      final files = await FilePicker.pickFiles();
-      final path = files.isEmpty ? null : files.first.path;
-      if (path != null) {
-        cubit.sendAttachment(path, caption: _input.text.trim());
+      final files = await FilePicker.pickFiles(allowMultiple: true);
+      final paths = [
+        for (final f in files) ?f.path,
+      ].take(5).toList();
+      if (paths.isNotEmpty) {
+        cubit.sendAttachments(paths, caption: _input.text.trim());
         _input.clear();
       }
     } catch (_) {
@@ -432,6 +452,18 @@ class _ThreadViewState extends State<_ThreadView> {
 
   void _voiceComingSoon() =>
       AppOverlays.snack(context, 'Voice messages coming soon.');
+
+  /// Fetches the group by id and opens its Group details screen.
+  Future<void> _openGroupInfo(BuildContext context, int groupId) async {
+    final result = await AppLoader.run(sl<GroupsRepository>().getGroup(groupId));
+    if (!context.mounted) return;
+    switch (result) {
+      case Success(value: final group):
+        context.push(AppRoutes.groupDetail, extra: group);
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -499,6 +531,20 @@ class _ThreadViewState extends State<_ThreadView> {
           ],
           ),
         ),
+        actions: [
+          if (c.type == ConversationType.direct)
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'Contact info',
+              onPressed: () => context.push(AppRoutes.contactInfo, extra: c),
+            )
+          else if (c.type == ConversationType.group && c.groupId != null)
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'Group info',
+              onPressed: () => _openGroupInfo(context, c.groupId!),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -632,22 +678,31 @@ class _Bubble extends StatelessWidget {
                       fontWeight: FontWeight.w700)),
             ),
           if (message.hasImage)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                MediaUrl.resolve(message.imageUrl)!,
-                width: 200,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox(
-                    height: 140,
-                    width: 200,
-                    child: ImagePlaceholder(role: PlaceholderRole.post)),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                fullscreenDialog: true,
+                builder: (_) =>
+                    _FullImageView(url: MediaUrl.resolve(message.imageUrl)!),
+              )),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  MediaUrl.resolve(message.imageUrl)!,
+                  width: 200,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox(
+                      height: 140,
+                      width: 200,
+                      child: ImagePlaceholder(role: PlaceholderRole.post)),
+                ),
               ),
             ),
           if (message.hasFileAttachment) _FileChip(message: message, mine: mine),
           if ((message.body ?? '').isNotEmpty)
             Text(message.body!,
                 style: TextStyle(color: mine ? Colors.white : null)),
+          if (LinkPreviewService.firstUrl(message.body) case final url?)
+            LinkPreviewCard(url: url, mine: mine),
           const SizedBox(height: 2),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -802,30 +857,47 @@ class _FileChip extends StatelessWidget {
         ? message.attachmentName!
         : fallback;
     final fg = mine ? Colors.white : context.nexveero.textSecondary;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: (mine ? Colors.white : context.nexveero.elevated)
-            .withValues(alpha: mine ? 0.18 : 1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20, color: fg),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: mine ? Colors.white : null,
-                    fontWeight: FontWeight.w500)),
-          ),
-        ],
+    return InkWell(
+      onTap: () => _open(context),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: (mine ? Colors.white : context.nexveero.elevated)
+              .withValues(alpha: mine ? 0.18 : 1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: fg),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: mine ? Colors.white : null,
+                      fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.download_rounded, size: 18, color: fg),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Opens/downloads the attachment in the system handler (browser/viewer).
+  Future<void> _open(BuildContext context) async {
+    final full = MediaUrl.resolve(message.attachmentUrl);
+    if (full == null) return;
+    final ok = await launchUrl(Uri.parse(full),
+        mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      AppOverlays.snack(context, 'Could not open the file');
+    }
   }
 }
 
@@ -1038,6 +1110,38 @@ class _SystemLine extends StatelessWidget {
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: context.nexveero.textSecondary)),
+      ),
+    );
+  }
+}
+
+/// Full-screen, pinch-to-zoom image viewer with a download action.
+class _FullImageView extends StatelessWidget {
+  const _FullImageView({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded, color: Colors.white),
+            tooltip: 'Download',
+            onPressed: () => launchUrl(Uri.parse(url),
+                mode: LaunchMode.externalApplication),
+          ),
+        ],
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.8,
+          maxScale: 4,
+          child: Image.network(url, fit: BoxFit.contain),
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/constants/app_constants.dart';
 import 'core/di/injection.dart';
+import 'core/realtime/presence_observer.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/storage_manager.dart';
 import 'core/theme/app_theme.dart';
@@ -11,9 +12,29 @@ import 'core/widgets/app_loader.dart';
 import 'features/auth/presentation/cubit/auth_cubit.dart';
 
 /// Root widget. Provides the app-wide [AuthCubit] (shared with the router) and
-/// [ThemeCubit], and applies the Aurora Bloom light/dark themes.
-class NexveeroApp extends StatelessWidget {
+/// [ThemeCubit], applies the Aurora Bloom themes, and drives presence off the
+/// app lifecycle.
+class NexveeroApp extends StatefulWidget {
   const NexveeroApp({super.key});
+
+  @override
+  State<NexveeroApp> createState() => _NexveeroAppState();
+}
+
+class _NexveeroAppState extends State<NexveeroApp> {
+  final _presence = PresenceObserver();
+
+  @override
+  void initState() {
+    super.initState();
+    _presence.attach();
+  }
+
+  @override
+  void dispose() {
+    _presence.detach();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

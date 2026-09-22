@@ -71,6 +71,7 @@ class ApiEndpoints {
       '/conversations/$id/messages/$msgId/star';
   static String conversationPin(Object id) => '/conversations/$id/pin';
   static const String messagesStarred = '/messages/starred';
+  static const String linkPreviews = '/link-previews';
 
   // Groups
   static const String groupsRecommended = '/groups/recommended';

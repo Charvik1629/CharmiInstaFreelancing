@@ -1,29 +1,77 @@
-import '../network/api_client.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
-/// Push notifications (Firebase Cloud Messaging).
+import '../config/onesignal_config.dart';
+import '../di/injection.dart';
+import '../network/api_client.dart';
+import '../router/app_router.dart';
+import '../router/app_routes.dart';
+import '../utils/logger.dart';
+import '../../features/auth/presentation/cubit/auth_cubit.dart';
+
+/// Push notifications via **OneSignal** (which relays to FCM/APNs server-side,
+/// so the app avoids the firebase_core Android-Gradle build wall).
 ///
-/// TEMPORARILY STUBBED. `firebase_core` cannot build under the project's pinned
-/// Android toolchain (AGP 8.11.1 + Gradle 8.14.4 + Flutter's built-in Kotlin):
-/// `:firebase_core:compileDebugJavaWithJavac` fails with *"Cannot query the
-/// value of this provider because it has no value available"* — an AGP/plugin
-/// incompatibility that hits both firebase_core 3.x and 4.x. So the Firebase
-/// deps are commented out in pubspec and the call sites (main/auth) run as
-/// no-ops. The real FCM implementation lives in git commit `10d7040`
-/// (`lib/core/push/push_service.dart` + `lib/firebase_options.dart`); restore it
-/// once the toolchain builds firebase_core. `google-services.json` and the
-/// backend `POST /devices` endpoint are already in place.
+/// Fill in [OneSignalConfig.appId] to activate; until then every call is a
+/// safe no-op. The static method name is kept as [initFirebase] so existing
+/// call sites (main.dart) don't change.
 class PushService {
   PushService(this._client);
 
   // ignore: unused_field
   final ApiClient _client;
+  bool _started = false;
 
-  /// No-op until Firebase is re-enabled.
-  static Future<void> initFirebase() async {}
+  /// Initializes the OneSignal SDK and routes notification taps. Called once at
+  /// startup (before auth resolves).
+  static Future<void> initFirebase() async {
+    if (!OneSignalConfig.isConfigured) {
+      AppLogger.w('OneSignal appId not set — push disabled.');
+      return;
+    }
+    OneSignal.initialize(OneSignalConfig.appId);
+    OneSignal.Notifications.addClickListener(_onClick);
+  }
 
-  /// No-op until Firebase is re-enabled.
-  Future<void> start() async {}
+  /// After login: prompts for permission and ties this device to the user so
+  /// the backend can target them by external id.
+  Future<void> start() async {
+    if (_started || !OneSignalConfig.isConfigured) return;
+    _started = true;
+    try {
+      await OneSignal.Notifications.requestPermission(true);
+      final userId = sl<AuthCubit>().state.user?.id;
+      if (userId != null) await OneSignal.login('$userId');
+    } catch (e) {
+      AppLogger.w('Push start failed: $e');
+    }
+  }
 
-  /// No-op until Firebase is re-enabled.
-  Future<void> unregister() async {}
+  /// On logout: detaches the external id so pushes stop for this user.
+  Future<void> unregister() async {
+    _started = false;
+    if (!OneSignalConfig.isConfigured) return;
+    try {
+      await OneSignal.logout();
+    } catch (_) {}
+  }
+
+  /// Routes a notification tap by its `type` / `deep_link` payload.
+  static void _onClick(OSNotificationClickEvent event) {
+    final data = event.notification.additionalData ?? const {};
+    final router = AppRouter.router;
+    switch (data['type']) {
+      case 'offer':
+        router.push(AppRoutes.offers);
+      case 'order_created':
+      case 'order':
+        router.push(AppRoutes.orders);
+      case 'approval':
+        router.push(AppRoutes.businessProfile);
+      case 'chat_message':
+      case 'chat':
+        router.push(AppRoutes.feed);
+      default:
+        router.push(AppRoutes.notifications);
+    }
+  }
 }

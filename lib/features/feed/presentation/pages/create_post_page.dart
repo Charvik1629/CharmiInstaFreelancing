@@ -473,8 +473,29 @@ class _DashedRectPainter extends CustomPainter {
 }
 
 /// Title + caption in one rounded card (design: bold text line + "Add a caption…").
-class _CaptionCard extends StatelessWidget {
+class _CaptionCard extends StatefulWidget {
   const _CaptionCard();
+
+  @override
+  State<_CaptionCard> createState() => _CaptionCardState();
+}
+
+class _CaptionCardState extends State<_CaptionCard> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed from the cubit so editing a post pre-fills the existing text.
+    _controller = TextEditingController(
+        text: context.read<CreatePostCubit>().state.title);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -495,6 +516,7 @@ class _CaptionCard extends StatelessWidget {
             children: [
               // Single content field (maps to the post title). Caption removed.
               TextField(
+                controller: _controller,
                 onChanged: cubit.setTitle,
                 maxLength: 255,
                 minLines: 2,

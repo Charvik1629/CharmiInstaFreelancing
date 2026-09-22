@@ -53,9 +53,11 @@ dependencies:
   file_picker: ^12.2.0
   razorpay_flutter: ^1.4.0
   share_plus: ^13.3.0
+  url_launcher: ^6.3.1
   in_app_purchase: ^3.2.0
-  # firebase_core: disabled — firebase_core fails to build on AGP 8.11.1 (see push_service.dart)
-  # firebase_messaging: disabled — re-enable with firebase_core
+  # firebase_core: disabled — needs coordinated Flutter+AGP realignment (see push_service.dart)
+  # firebase_messaging: disabled
+  onesignal_flutter: ^5.3.4
   socket_io_client: ^2.0.3+1
 
 dev_dependencies:

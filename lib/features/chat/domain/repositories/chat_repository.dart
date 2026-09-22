@@ -21,7 +21,7 @@ abstract class ChatRepository {
     required int id,
     required ConversationType type,
     String body,
-    String? imagePath,
+    List<String> attachmentPaths = const [],
   });
 
   /// Edit a text message (server enforces the ≤1h window).

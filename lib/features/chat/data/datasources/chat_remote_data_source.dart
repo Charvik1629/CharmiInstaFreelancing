@@ -45,7 +45,7 @@ abstract class ChatRemoteDataSource {
     required int id,
     required ConversationType type,
     String body = '',
-    String? imagePath,
+    List<String> attachmentPaths = const [],
   });
 
   /// PATCH /conversations/{id}/messages/{msgId} — edit a text message (≤1h).
@@ -155,21 +155,21 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     required int id,
     required ConversationType type,
     String body = '',
-    String? imagePath,
+    List<String> attachmentPaths = const [],
   }) async {
     final path = type == ConversationType.broadcast
         ? ApiEndpoints.broadcastMessages(id)
         : ApiEndpoints.conversationMessages(id);
 
     final Object data;
-    if (imagePath != null && imagePath.isNotEmpty) {
+    if (attachmentPaths.isNotEmpty) {
+      // The API accepts up to 5 files as an attachments[] array.
       data = FormData.fromMap({
         if (body.isNotEmpty) 'body': body,
-        // The API expects an attachments[] file array.
-        'attachments[]': await MultipartFile.fromFile(
-          imagePath,
-          filename: imagePath.split('/').last,
-        ),
+        'attachments[]': [
+          for (final p in attachmentPaths)
+            await MultipartFile.fromFile(p, filename: p.split('/').last),
+        ],
       });
     } else {
       data = {'body': body};
