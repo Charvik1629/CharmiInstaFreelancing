@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../domain/entities/report.dart';
 import '../cubit/admin_reports_cubit.dart';
 
-/// Admin · Reported posts (design). Moderation queue with Pending / Reviewed /
-/// Dismissed tabs and per-report actions.
+/// Admin · Reported posts (design). Moderation queue with All / Pending /
+/// Reviewed / Dismissed tabs and per-report actions.
 class AdminReportsPage extends StatelessWidget {
   const AdminReportsPage({super.key});
 
@@ -37,10 +39,12 @@ class _ReportsView extends StatelessWidget {
             child: BlocBuilder<AdminReportsCubit, AdminReportsState>(
               buildWhen: (p, c) => p.filter != c.filter,
               builder: (context, state) => AppSegmented(
-                segments: const ['Pending', 'Reviewed', 'Dismissed'],
-                selectedIndex: ReportStatus.values.indexOf(state.filter),
-                onChanged: (i) =>
-                    context.read<AdminReportsCubit>().setFilter(ReportStatus.values[i]),
+                segments: const ['All', 'Pending', 'Reviewed', 'Dismissed'],
+                selectedIndex: state.filter == null
+                    ? 0
+                    : ReportStatus.values.indexOf(state.filter!) + 1,
+                onChanged: (i) => context.read<AdminReportsCubit>().setFilter(
+                    i == 0 ? null : ReportStatus.values[i - 1]),
               ),
             ),
           ),
@@ -57,10 +61,22 @@ class _ReportsView extends StatelessWidget {
                       onRetry: () => context.read<AdminReportsCubit>().load(),
                     );
                   case ReportsStatus.empty:
-                    return EmptyView(
-                      title: 'Nothing here',
-                      subtitle: 'No ${state.filter.label.toLowerCase()} reports.',
-                      icon: Icons.verified_user_outlined,
+                    // Pull-to-refresh must work even with no data, so the empty
+                    // state is a scrollable list wrapped in a RefreshIndicator.
+                    return RefreshIndicator(
+                      onRefresh: () => context.read<AdminReportsCubit>().refresh(),
+                      child: ListView(
+                        children: [
+                          const SizedBox(height: 120),
+                          EmptyView(
+                            title: 'Nothing here',
+                            subtitle: state.filter == null
+                                ? 'No reports.'
+                                : 'No ${state.filter!.label.toLowerCase()} reports.',
+                            icon: Icons.verified_user_outlined,
+                          ),
+                        ],
+                      ),
                     );
                   case ReportsStatus.loaded:
                     return RefreshIndicator(
@@ -91,6 +107,18 @@ class _ReportCard extends StatelessWidget {
     if (ok && context.mounted) {
       AppOverlays.snack(context, 'Report ${status.label.toLowerCase()}');
     }
+  }
+
+  /// Opens the reported post's detail; fetches the full [Load] by id first.
+  Future<void> _viewPost(BuildContext context) async {
+    final cubit = context.read<AdminReportsCubit>();
+    final load = await AppLoader.run(cubit.fetchLoad(report.loadId));
+    if (!context.mounted) return;
+    if (load == null) {
+      AppOverlays.snack(context, 'Could not open post');
+      return;
+    }
+    context.push(AppRoutes.postDetail, extra: load);
   }
 
   @override
@@ -152,6 +180,18 @@ class _ReportCard extends StatelessWidget {
                 Text(report.status.label,
                     style: texts.labelSmall?.copyWith(color: context.nexveero.textSecondary)),
             ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _viewPost(context),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('View post'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+              ),
+            ),
           ),
           if (pending) ...[
             const SizedBox(height: AppSpacing.md),

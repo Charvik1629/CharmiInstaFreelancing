@@ -1,16 +1,18 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:gal/gal.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/config/maps_config.dart';
 import '../../../../core/link_preview/link_preview_service.dart';
+import 'location_picker_page.dart';
+import 'location_view_page.dart';
+import '../widgets/full_image_view.dart';
 import '../widgets/link_preview_card.dart';
+import '../widgets/send_inquiry_sheet.dart';
+import '../widgets/voice_bubble.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
@@ -28,7 +30,7 @@ import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/repositories/chat_repository.dart';
 import '../../../orders/domain/entities/order.dart';
-import '../../../orders/presentation/widgets/create_order_sheet.dart';
+import '../../../wallet/presentation/widgets/overage_dialog.dart';
 import '../cubit/conversation_cubit.dart';
 
 /// A single chat thread (direct, group or broadcast). Broadcasts are one-to-many
@@ -84,11 +86,61 @@ class _ThreadViewState extends State<_ThreadView> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _input.text;
     if (text.trim().isEmpty) return;
-    context.read<ConversationCubit>().send(text);
+    final cubit = context.read<ConversationCubit>();
+
+    // Broadcast: once the free allowance is spent, each message costs credits.
+    // Confirm the debit (design "Free message limit reached") before sending.
+    if (cubit.broadcastOverLimit) {
+      final cost = cubit.broadcastNextCost;
+      final balance = context.read<AuthCubit>().state.user?.creditBalance ?? 0;
+      final choice = await OverageDialog.show(
+        context,
+        cost: cost,
+        balance: balance,
+        title: 'Free message limit reached',
+        message:
+            "You've sent ${cubit.broadcastFreeLimit} free broadcast messages. "
+            'Sending another will debit $cost credits.',
+        debitLabel: 'Debit & send',
+      );
+      if (!mounted) return;
+      switch (choice) {
+        case OverageChoice.debit:
+          break; // Fall through to send below.
+        case OverageChoice.subscribe:
+          context.push(AppRoutes.subscription);
+          return;
+        case OverageChoice.cancel:
+          return;
+      }
+    }
+
     _input.clear();
+    await cubit.send(text);
+    if (!mounted) return;
+
+    // Fallback: the server rejected the send with the quota-403 (limit over and
+    // not enough credits) — surface the unfunded "Broadcast message limit over"
+    // dialog, which routes to Subscription.
+    if (cubit.state.broadcastLimitReached) {
+      cubit.clearBroadcastLimit();
+      final cost = cubit.broadcastNextCost;
+      final balance = context.read<AuthCubit>().state.user?.creditBalance ?? 0;
+      final choice = await OverageDialog.show(
+        context,
+        cost: cost,
+        balance: balance,
+        title: 'Broadcast message limit over',
+        message: 'Your broadcast message limit is over. You have to subscribe.',
+      );
+      if (!mounted) return;
+      if (choice == OverageChoice.subscribe) {
+        context.push(AppRoutes.subscription);
+      }
+    }
   }
 
   /// The "+" attachment menu (design: Photo · Camera · File).
@@ -138,21 +190,15 @@ class _ThreadViewState extends State<_ThreadView> {
               _shareLocation();
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('Contact'),
-            onTap: () {
-              Navigator.of(sheetCtx).pop();
-              _shareContact();
-            },
-          ),
-          if (!widget.conversation.isBroadcast)
+          // Inquiry — direct chats only (server rejects it elsewhere).
+          if (widget.conversation.type == ConversationType.direct)
             ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: const Text('Send order'),
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Inquiry'),
+              subtitle: const Text('Ask with optional price'),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
-                _createOrder();
+                _sendInquiry();
               },
             ),
         ],
@@ -160,121 +206,30 @@ class _ThreadViewState extends State<_ThreadView> {
     );
   }
 
-  Future<void> _shareLocation() async {
-    final label = TextEditingController();
-    final lat = TextEditingController();
-    final lng = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Share location', style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(controller: label, label: 'Place', hint: 'Enter place'),
-              const SizedBox(height: AppSpacing.md),
-              Row(children: [
-                Expanded(
-                    child: AppTextField(
-                        controller: lat,
-                        label: 'Lat',
-                        keyboardType: TextInputType.number)),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                    child: AppTextField(
-                        controller: lng,
-                        label: 'Lng',
-                        keyboardType: TextInputType.number)),
-              ]),
-              const SizedBox(height: AppSpacing.xl),
-              Row(children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Cancel',
-                    variant: AppButtonVariant.outline,
-                    onPressed: () => Navigator.pop(ctx, false),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AppButton(
-                    label: 'Send',
-                    onPressed: () => Navigator.pop(ctx, true),
-                  ),
-                ),
-              ]),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final result = await context.read<ConversationCubit>().sendLocation(
-          double.tryParse(lat.text.trim()) ?? 0,
-          double.tryParse(lng.text.trim()) ?? 0,
-          label.text.trim(),
-        );
+  Future<void> _sendInquiry() async {
+    final input = await SendInquirySheet.show(context);
+    if (input == null || !mounted) return;
+    final result = await context
+        .read<ConversationCubit>()
+        .sendInquiry(input.body, input.price);
     if (mounted && !result.isSuccess) {
-      AppOverlays.snack(context, result.failureOrNull?.message ?? 'Could not share location');
+      AppOverlays.snack(
+          context, result.failureOrNull?.message ?? 'Could not send inquiry');
     }
   }
 
-  Future<void> _shareContact() async {
-    final name = TextEditingController();
-    final phone = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Share contact', style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(controller: name, label: 'Name'),
-              const SizedBox(height: AppSpacing.md),
-              AppTextField(
-                  controller: phone,
-                  label: 'Phone',
-                  keyboardType: TextInputType.phone),
-              const SizedBox(height: AppSpacing.xl),
-              Row(children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Cancel',
-                    variant: AppButtonVariant.outline,
-                    onPressed: () => Navigator.pop(ctx, false),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AppButton(
-                    label: 'Send',
-                    onPressed: () => Navigator.pop(ctx, true),
-                  ),
-                ),
-              ]),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _shareLocation() async {
+    // WhatsApp-style: pick a spot on the map (or use current location).
+    final picked = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute(builder: (_) => const LocationPickerPage()),
     );
-    if (ok != true || !mounted) return;
+    if (picked == null || !mounted) return;
     final result = await context
         .read<ConversationCubit>()
-        .sendContact(name.text.trim(), phone.text.trim());
+        .sendLocation(picked.lat, picked.lng, picked.label ?? '');
     if (mounted && !result.isSuccess) {
-      AppOverlays.snack(context, result.failureOrNull?.message ?? 'Could not share contact');
+      AppOverlays.snack(context,
+          result.failureOrNull?.message ?? 'Could not share location');
     }
   }
 
@@ -382,17 +337,6 @@ class _ThreadViewState extends State<_ThreadView> {
       AppOverlays.snack(
           context, result.failureOrNull?.message ?? 'Could not edit message');
     }
-  }
-
-  Future<void> _createOrder() async {
-    final order = await CreateOrderSheet.show(context,
-        conversationId: widget.conversation.id);
-    if (order == null || !mounted) return;
-    // Refresh the thread so the order card (returned by the backend as an
-    // order-type message) shows up; also confirm inline.
-    await context.read<ConversationCubit>().load();
-    if (!mounted) return;
-    AppOverlays.snack(context, 'Order sent · ${order.amountCredits} credits');
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -686,7 +630,7 @@ class _Bubble extends StatelessWidget {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(
                 fullscreenDialog: true,
                 builder: (_) =>
-                    _FullImageView(url: MediaUrl.resolve(message.imageUrl)!),
+                    FullImageView(url: MediaUrl.resolve(message.imageUrl)!),
               )),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
@@ -701,11 +645,23 @@ class _Bubble extends StatelessWidget {
                 ),
               ),
             ),
-          if (message.hasFileAttachment) _FileChip(message: message, mine: mine),
-          if ((message.body ?? '').isNotEmpty)
+          // Voice/audio → in-app player; other files → chip.
+          if (message.attachmentKind == 'audio' &&
+              (message.attachmentUrl?.isNotEmpty ?? false))
+            VoiceBubble(url: MediaUrl.resolve(message.attachmentUrl)!, mine: mine)
+          else if (message.hasFileAttachment)
+            _FileChip(message: message, mine: mine),
+          // Location card (type: location) — pin + label, opens a maps app.
+          if (message.isLocation)
+            _LocationCard(message: message, mine: mine)
+          // Inquiry card (type: inquiry) — question + optional price.
+          else if (message.isInquiry)
+            _InquiryCard(message: message, mine: mine)
+          else if ((message.body ?? '').isNotEmpty)
             Text(message.body!,
                 style: TextStyle(color: mine ? Colors.white : null)),
-          if (LinkPreviewService.firstUrl(message.body) case final url?)
+          if (LinkPreviewService.firstUrl(message.body) case final url?
+              when !message.isInquiry)
             LinkPreviewCard(url: url, mine: mine),
           const SizedBox(height: 2),
           Row(
@@ -838,6 +794,154 @@ class _OrderCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A one-to-one Inquiry card (design "Inquiry"): an "INQUIRY" label, the
+/// question, and an optional price chip.
+class _InquiryCard extends StatelessWidget {
+  const _InquiryCard({required this.message, required this.mine});
+  final ChatMessage message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final accent = mine ? Colors.white : primary;
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 4),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: mine
+            ? Colors.white.withValues(alpha: 0.14)
+            : primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: accent.withValues(alpha: mine ? 0.4 : 0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.help_outline, size: 13, color: accent),
+              const SizedBox(width: 5),
+              Text('INQUIRY',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: accent)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(message.body ?? '',
+              style: TextStyle(color: mine ? Colors.white : null)),
+          if ((message.inquiryPrice ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: mine
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text('Price ${message.inquiryPrice}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: mine ? Colors.white : primary)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A shared-location bubble (WhatsApp-style): a static map thumbnail with the
+/// place label below; tapping opens the full in-app map screen.
+class _LocationCard extends StatelessWidget {
+  const _LocationCard({required this.message, required this.mine});
+  final ChatMessage message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final lat = message.latitude;
+    final lng = message.longitude;
+    final label = (message.locationLabel?.isNotEmpty ?? false)
+        ? message.locationLabel!
+        : (message.body?.isNotEmpty ?? false)
+            ? message.body!
+            : 'Location';
+    if (lat == null || lng == null) {
+      // No coordinates — just show the label with a pin.
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.location_on,
+            size: 18, color: mine ? Colors.white : Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 6),
+        Flexible(child: Text(label, style: TextStyle(color: mine ? Colors.white : null))),
+      ]);
+    }
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => LocationViewPage(lat: lat, lng: lng, label: label),
+      )),
+      child: Container(
+        width: 220,
+        margin: const EdgeInsets.only(top: 2, bottom: 4),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: (mine ? Colors.white : context.nexveero.border)
+                  .withValues(alpha: mine ? 0.4 : 1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 10,
+              child: Image.network(
+                MapsConfig.staticMap(lat, lng, width: 440, height: 260),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  color: context.nexveero.elevated,
+                  alignment: Alignment.center,
+                  child: Icon(Icons.map_outlined,
+                      color: context.nexveero.textSecondary),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.location_on,
+                      size: 16,
+                      color: mine ? Colors.white : Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: mine ? Colors.white : null)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1114,86 +1218,6 @@ class _SystemLine extends StatelessWidget {
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: context.nexveero.textSecondary)),
-      ),
-    );
-  }
-}
-
-/// Full-screen, pinch-to-zoom image viewer that saves straight to the device
-/// gallery (asks the runtime photo permission) instead of opening a browser.
-class _FullImageView extends StatefulWidget {
-  const _FullImageView({required this.url});
-  final String url;
-
-  @override
-  State<_FullImageView> createState() => _FullImageViewState();
-}
-
-class _FullImageViewState extends State<_FullImageView> {
-  bool _saving = false;
-
-  Future<void> _save() async {
-    if (_saving) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _saving = true);
-    try {
-      // Runtime gallery permission (Gal handles the Android/iOS specifics).
-      final granted = await Gal.hasAccess() || await Gal.requestAccess();
-      if (!granted) {
-        messenger.showSnackBar(
-            const SnackBar(content: Text('Gallery permission denied')));
-        return;
-      }
-      final res = await Dio().get<List<int>>(widget.url,
-          options: Options(responseType: ResponseType.bytes));
-      final bytes = res.data;
-      if (bytes == null || bytes.isEmpty) {
-        messenger.showSnackBar(
-            const SnackBar(content: Text('Could not download image')));
-        return;
-      }
-      await Gal.putImageBytes(Uint8List.fromList(bytes),
-          name: 'nexveero_${DateTime.now().millisecondsSinceEpoch}');
-      messenger
-          .showSnackBar(const SnackBar(content: Text('Saved to gallery')));
-    } on GalException catch (e) {
-      messenger.showSnackBar(
-          SnackBar(content: Text('Could not save: ${e.type.message}')));
-    } catch (_) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Could not download image')));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: _saving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.download_rounded, color: Colors.white),
-            tooltip: 'Save to gallery',
-            onPressed: _saving ? null : _save,
-          ),
-        ],
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.8,
-          maxScale: 4,
-          child: Image.network(widget.url, fit: BoxFit.contain),
-        ),
       ),
     );
   }

@@ -18,12 +18,16 @@ class BusinessPostCard extends StatelessWidget {
     required this.load,
     required this.onShare,
     required this.onReport,
+    this.onAsk,
     this.onMore,
   });
 
   final Load load;
   final VoidCallback onShare;
   final VoidCallback onReport;
+
+  /// Ask a question about the post (can_ask_question). Null hides the action.
+  final VoidCallback? onAsk;
   final VoidCallback? onMore;
 
   @override
@@ -82,11 +86,14 @@ class BusinessPostCard extends StatelessWidget {
                   ),
                 ),
                 if (load.isBoosted) const _BoostedTag(),
-                IconButton(
-                  icon: const Icon(Icons.more_horiz),
-                  color: nex.iconInactive,
-                  onPressed: onMore,
-                ),
+                // ⋯ is owner-only (Edit / Boost). Non-owners use the inline
+                // Ask / Share / Report row below — so no direct-to-report jump.
+                if (load.isOwn && onMore != null)
+                  IconButton(
+                    icon: const Icon(Icons.more_horiz),
+                    color: nex.iconInactive,
+                    onPressed: onMore,
+                  ),
               ],
             ),
           ),
@@ -113,14 +120,23 @@ class BusinessPostCard extends StatelessWidget {
                 horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
             child: Row(
               children: [
+                // Ask a question — hidden for own posts / when not permitted.
+                if (!load.isOwn && load.canAskQuestion && onAsk != null)
+                  Expanded(
+                      child: _ActionButton(
+                          icon: Icons.help_outline,
+                          label: 'Ask',
+                          onTap: onAsk!)),
                 Expanded(
                     child: _ActionButton(
                         icon: Icons.ios_share, label: 'Share', onTap: onShare)),
-                Expanded(
-                    child: _ActionButton(
-                        icon: Icons.flag_outlined,
-                        label: 'Report',
-                        onTap: onReport)),
+                // Report — never on the owner's own post (API also blocks it).
+                if (!load.isOwn && load.canReport)
+                  Expanded(
+                      child: _ActionButton(
+                          icon: Icons.flag_outlined,
+                          label: 'Report',
+                          onTap: onReport)),
               ],
             ),
           ),

@@ -1,5 +1,6 @@
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/models/load.dart';
 import '../../../../core/models/user.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_response.dart';
@@ -7,11 +8,15 @@ import '../../domain/entities/report.dart';
 import '../../domain/entities/user_approval.dart';
 
 abstract class AdminRemoteDataSource {
-  /// GET /admin/reports?status= — paginated moderation queue.
+  /// GET /admin/reports?status= — paginated moderation queue. A null [status]
+  /// fetches every report (the "All" tab), omitting the status filter.
   Future<PaginatedResponse<Report>> getReports({
-    required ReportStatus status,
+    ReportStatus? status,
     int page = 1,
   });
+
+  /// GET /loads/{id} — the reported post, for the "View post" action.
+  Future<Load> getLoad(int id);
 
   /// PATCH /admin/reports/{id} — set the review outcome.
   Future<Report> updateReport({
@@ -43,18 +48,24 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
 
   @override
   Future<PaginatedResponse<Report>> getReports({
-    required ReportStatus status,
+    ReportStatus? status,
     int page = 1,
   }) async {
     final res = await _client.get<Map<String, dynamic>>(
       ApiEndpoints.adminReports,
       query: {
-        'status': status.name,
+        if (status != null) 'status': status.name,
         'page': page,
         'per_page': AppConstants.defaultPageSize,
       },
     );
     return ApiEnvelope.list(res.data, Report.fromJson);
+  }
+
+  @override
+  Future<Load> getLoad(int id) async {
+    final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.load(id));
+    return ApiEnvelope.object(res.data, Load.fromJson);
   }
 
   @override

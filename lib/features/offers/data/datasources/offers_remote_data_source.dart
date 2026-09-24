@@ -4,8 +4,8 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_response.dart';
 import '../../domain/entities/offer.dart';
 
-/// Which side of the offer inbox to show.
-enum OfferTag { received, sent }
+/// Which side of the offer inbox to show (design: All / Received / Sent).
+enum OfferTag { all, received, sent }
 
 abstract class OffersRemoteDataSource {
   /// GET /offers?tag=received|sent — paginated.
@@ -36,7 +36,9 @@ class OffersRemoteDataSourceImpl implements OffersRemoteDataSource {
     final res = await _client.get<Map<String, dynamic>>(
       ApiEndpoints.offers,
       query: {
-        'tag': tag.name,
+        // "All" fetches both sides — omit the filter so the API returns
+        // received + sent together.
+        if (tag != OfferTag.all) 'tag': tag.name,
         'page': page,
         'per_page': AppConstants.defaultPageSize,
       },

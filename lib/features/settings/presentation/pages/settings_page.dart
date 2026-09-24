@@ -85,13 +85,6 @@ class SettingsPage extends StatelessWidget {
             title: 'Help & support',
             onTap: () => AppOverlays.snack(context, 'Help center coming soon.'),
           ),
-          _NavTile(
-            icon: Icons.info_outline,
-            title: 'About Nexveero',
-            trailing: Text('v1.0.0',
-                style: TextStyle(color: context.nexveero.textSecondary)),
-            onTap: () => AppOverlays.snack(context, 'Nexveero — built with Flutter.'),
-          ),
           const SizedBox(height: AppSpacing.lg),
           const _DangerZone(),
         ],
@@ -232,20 +225,18 @@ class _NavTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.trailing,
   });
 
   final IconData icon;
   final String title;
   final VoidCallback onTap;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: context.nexveero.textSecondary),
       title: Text(title),
-      trailing: trailing ?? const Icon(Icons.chevron_right, size: 20),
+      trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: onTap,
     );
   }

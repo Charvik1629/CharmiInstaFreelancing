@@ -7,6 +7,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/realtime/socket_service.dart';
 import '../../../../core/utils/result.dart';
+import '../../domain/entities/broadcast_quota.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -34,6 +35,34 @@ class ConversationCubit extends Cubit<ConversationState> {
   Timer? _presenceTimer;
 
   bool get canSend => conversation.canChat;
+
+  /// True when this is a broadcast whose free allowance is spent and the next
+  /// message will be charged — the page must confirm the credit debit first.
+  bool get broadcastOverLimit =>
+      conversation.type == ConversationType.broadcast &&
+      (state.broadcastQuota?.overFreeLimit ?? false);
+
+  /// Credits the next broadcast message will cost (0 if unknown / free).
+  int get broadcastNextCost => state.broadcastQuota?.nextCreditCost ?? 0;
+
+  /// The free-message allowance for this broadcast list (0 if unknown).
+  int get broadcastFreeLimit => state.broadcastQuota?.freeLimit ?? 0;
+
+  /// Clears the transient quota-403 signal once the page has shown the dialog.
+  void clearBroadcastLimit() {
+    if (state.broadcastLimitReached) {
+      emit(state.copyWith(broadcastLimitReached: false));
+    }
+  }
+
+  /// Re-reads `meta.broadcast_message_quota` (broadcast threads only).
+  Future<void> _refreshBroadcastQuota() async {
+    if (conversation.type != ConversationType.broadcast) return;
+    final res = await _repository.getBroadcastQuota(conversation.id);
+    if (res case Success(value: final q) when q != null && !isClosed) {
+      emit(state.copyWith(broadcastQuota: q));
+    }
+  }
 
   /// Subscribes to live `message:new` events for this thread (falls back to the
   /// existing polling when the socket isn't connected).
@@ -191,6 +220,7 @@ class ConversationCubit extends Cubit<ConversationState> {
           nextBeforeId: page.nextBeforeId,
         ));
         _markRead();
+        _refreshBroadcastQuota();
       case Err(failure: final f):
         emit(state.copyWith(status: ThreadStatus.error, errorMessage: f.message));
     }
@@ -250,15 +280,25 @@ class ConversationCubit extends Cubit<ConversationState> {
       body: body,
       attachmentPaths: attachmentPaths,
     );
+    final isBroadcast = conversation.type == ConversationType.broadcast;
     switch (result) {
       case Success(value: final message):
         emit(state.copyWith(
           messages: _reconcile(message),
           status: ThreadStatus.loaded,
           isSending: false,
+          broadcastLimitReached: false,
         ));
+        // Refresh the quota so the next send knows the updated used-count/cost.
+        if (isBroadcast) _refreshBroadcastQuota();
       case Err(failure: final f):
-        emit(state.copyWith(isSending: false, errorMessage: f.message));
+        // A 403 on a broadcast send is the "limit over · subscribe" case — flag
+        // it so the page can raise the unfunded overage dialog.
+        emit(state.copyWith(
+          isSending: false,
+          errorMessage: f.message,
+          broadcastLimitReached: isBroadcast && f.statusCode == 403,
+        ));
     }
   }
 
@@ -277,12 +317,12 @@ class ConversationCubit extends Cubit<ConversationState> {
     return result;
   }
 
-  /// Shares a contact (name + phone) as a message.
-  Future<Result<ChatMessage>> sendContact(String name, String phone) async {
-    final result = await _repository.sendMeta(
+  /// Sends a one-to-one inquiry (question + optional INR price string).
+  Future<Result<ChatMessage>> sendInquiry(String body, String? price) async {
+    final result = await _repository.sendInquiry(
       conversationId: conversation.id,
-      type: 'contact',
-      meta: {'name': name, 'phone': phone},
+      body: body,
+      price: price,
     );
     if (result case Success(value: final m)) {
       emit(state.copyWith(

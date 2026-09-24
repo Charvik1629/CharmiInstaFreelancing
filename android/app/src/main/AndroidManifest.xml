@@ -14,11 +14,23 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
+    <!-- Saving downloaded chat images to the gallery (gal). API 29 and below
+         need WRITE_EXTERNAL_STORAGE; 30+ use MediaStore and need no permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+    <!-- Sharing the user's current location in chat (Google Maps + geolocator). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="Nexveero"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
+        <!-- Google Maps SDK for Android API key. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyA8aVN6jVSWsASd5Lc7qra4sNofCusVI6U"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

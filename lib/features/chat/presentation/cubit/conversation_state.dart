@@ -15,6 +15,8 @@ class ConversationState extends Equatable {
     this.peerLastReadAt,
     this.peerOnline = false,
     this.peerLastSeen,
+    this.broadcastQuota,
+    this.broadcastLimitReached = false,
   });
 
   final ThreadStatus status;
@@ -38,6 +40,14 @@ class ConversationState extends Equatable {
   final bool peerOnline;
   final DateTime? peerLastSeen;
 
+  /// Broadcast free-message allowance (broadcast threads only; null otherwise).
+  final BroadcastQuota? broadcastQuota;
+
+  /// Set when a broadcast send was rejected with the quota-403 ("limit over ·
+  /// subscribe"). The page consumes it to raise the unfunded overage dialog,
+  /// then clears it.
+  final bool broadcastLimitReached;
+
   ConversationState copyWith({
     ThreadStatus? status,
     List<ChatMessage>? messages,
@@ -52,6 +62,8 @@ class ConversationState extends Equatable {
     DateTime? peerLastReadAt,
     bool? peerOnline,
     DateTime? peerLastSeen,
+    BroadcastQuota? broadcastQuota,
+    bool? broadcastLimitReached,
   }) {
     return ConversationState(
       status: status ?? this.status,
@@ -65,6 +77,9 @@ class ConversationState extends Equatable {
       peerLastReadAt: peerLastReadAt ?? this.peerLastReadAt,
       peerOnline: peerOnline ?? this.peerOnline,
       peerLastSeen: peerLastSeen ?? this.peerLastSeen,
+      broadcastQuota: broadcastQuota ?? this.broadcastQuota,
+      broadcastLimitReached:
+          broadcastLimitReached ?? this.broadcastLimitReached,
     );
   }
 
@@ -81,5 +96,7 @@ class ConversationState extends Equatable {
         peerLastReadAt,
         peerOnline,
         peerLastSeen,
+        broadcastQuota,
+        broadcastLimitReached,
       ];
 }

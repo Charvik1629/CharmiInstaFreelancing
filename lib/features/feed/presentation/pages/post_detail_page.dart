@@ -57,11 +57,12 @@ class PostDetailPage extends StatelessWidget {
 
   Future<void> _share(BuildContext context) async {
     final by = load.author?.name;
+    // Share the post's canonical link (API share_url).
     final text = [
       load.title,
       if (by != null) 'by $by',
-      'on Nexveero',
-    ].join(' ');
+      if ((load.shareUrl ?? '').isNotEmpty) load.shareUrl,
+    ].whereType<String>().join(' ');
     await SharePlus.instance.share(ShareParams(text: text));
   }
 

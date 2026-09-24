@@ -113,25 +113,38 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 70,
+                height: 70,
                 decoration: BoxDecoration(
-                  gradient: context.nexveero.primaryGradient,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  color: context.nexveero.gradientStart.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
                 ),
                 child: Icon(
                     isEmail
-                        ? Icons.mark_email_read_outlined
-                        : Icons.smartphone_outlined,
-                    color: Colors.white,
-                    size: 30),
+                        ? Icons.mark_email_read
+                        : Icons.smartphone,
+                    color: context.nexveero.gradientStart,
+                    size: 36),
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text(isEmail ? 'Verify your email' : 'Verify your mobile',
-                  style: texts.displayLarge),
+              Text("Verify it's you", style: texts.displayLarge),
               const SizedBox(height: AppSpacing.xs),
-              Text('Enter the 6-digit code sent to $to',
-                  style: texts.bodyLarge?.copyWith(color: context.nexveero.textSecondary)),
+              Text.rich(
+                TextSpan(
+                  style: texts.bodyLarge
+                      ?.copyWith(color: context.nexveero.textSecondary),
+                  children: [
+                    const TextSpan(text: 'Enter the 6-digit code sent to\n'),
+                    TextSpan(
+                      text: to,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: AppSpacing.xl),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -152,7 +165,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
               ),
               const SizedBox(height: AppSpacing.lg),
               AppButton(
-                  label: isEmail ? 'Verify email' : 'Verify mobile',
+                  label: 'Verify',
                   isLoading: _submitting,
                   onPressed: _complete ? _verify : null),
               const SizedBox(height: AppSpacing.md),

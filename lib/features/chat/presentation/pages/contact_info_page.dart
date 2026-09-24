@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection.dart';
+import '../widgets/full_image_view.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -174,11 +176,23 @@ class _MediaGrid extends StatelessWidget {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3, mainAxisSpacing: 3, crossAxisSpacing: 3),
       itemCount: items.length,
-      itemBuilder: (_, i) {
+      itemBuilder: (context, i) {
         final m = items[i];
         final url = MediaUrl.resolve(m.imageUrl ?? m.attachmentUrl);
         final isVideo = m.attachmentKind == 'video';
-        return Stack(
+        return GestureDetector(
+          onTap: url == null
+              ? null
+              : () {
+                  if (isVideo) {
+                    launchUrl(Uri.parse(url),
+                        mode: LaunchMode.externalApplication);
+                  } else {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => FullImageView(url: url)));
+                  }
+                },
+          child: Stack(
           fit: StackFit.expand,
           children: [
             if (url != null)
@@ -199,6 +213,7 @@ class _MediaGrid extends StatelessWidget {
                 child: const Icon(Icons.play_arrow, color: Colors.white, size: 30),
               ),
           ],
+        ),
         );
       },
     );
@@ -223,6 +238,10 @@ class _LinksList extends StatelessWidget {
         final url = regex.firstMatch(m.body ?? '')?.group(0) ?? '';
         final host = Uri.tryParse(url)?.host ?? url;
         return ListTile(
+          onTap: url.isEmpty
+              ? null
+              : () => launchUrl(Uri.parse(url),
+                  mode: LaunchMode.externalApplication),
           leading: Container(
             width: 44,
             height: 44,
@@ -262,7 +281,12 @@ class _DocsList extends StatelessWidget {
       itemBuilder: (_, i) {
         final m = items[i];
         final audio = m.attachmentKind == 'audio';
+        final docUrl = MediaUrl.resolve(m.attachmentUrl);
         return ListTile(
+          onTap: docUrl == null
+              ? null
+              : () => launchUrl(Uri.parse(docUrl),
+                  mode: LaunchMode.externalApplication),
           leading: Container(
             width: 44,
             height: 44,

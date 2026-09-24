@@ -98,6 +98,7 @@ class _RegisterViewState extends State<_RegisterView> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => context.go(AppRoutes.login)),
+        title: const Text('Create account'),
       ),
       body: BlocListener<RegisterCubit, AuthFormState>(
         listenWhen: (p, c) => p.status != c.status,
@@ -119,17 +120,12 @@ class _RegisterViewState extends State<_RegisterView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AuthBrandMark(),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text('Create account', style: texts.displayLarge),
-                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Register your business on Nexveero. An admin reviews new '
-                    'accounts before access is granted.',
+                    'Register your business to join Nexveero.',
                     style: texts.bodyLarge
                         ?.copyWith(color: context.nexveero.textSecondary),
                   ),
-                  const SizedBox(height: AppSpacing.xxl),
+                  const SizedBox(height: AppSpacing.xl),
                   BlocBuilder<RegisterCubit, AuthFormState>(
                     builder: (context, state) {
                       return Column(

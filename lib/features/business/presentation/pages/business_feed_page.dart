@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/models/load.dart';
@@ -11,6 +12,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../feed/presentation/cubit/feed_cubit.dart';
+import '../../../feed/presentation/widgets/ask_question_sheet.dart';
 import '../../../feed/presentation/widgets/boost_confirm_dialog.dart';
 import '../../../feed/presentation/widgets/feed_ad_slot.dart';
 import '../../../feed/presentation/widgets/report_sheet.dart';
@@ -99,17 +101,36 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
         result.isSuccess ? 'Report submitted' : 'Could not submit report');
   }
 
+  Future<void> _ask(Load load) async {
+    final body = await AskQuestionSheet.show(context, subtitle: load.title);
+    if (body == null || body.isEmpty || !mounted) return;
+    final result = await context.read<FeedCubit>().ask(load, body);
+    if (!mounted) return;
+    AppOverlays.snack(context,
+        result.isSuccess ? 'Question sent' : 'Could not send question');
+  }
+
+  Future<void> _share(Load load) async {
+    final by = load.author?.name;
+    final text = [
+      load.title,
+      if (by != null) 'by $by',
+      if ((load.shareUrl ?? '').isNotEmpty) load.shareUrl,
+    ].whereType<String>().join(' ');
+    await SharePlus.instance.share(ShareParams(text: text));
+  }
+
+  // ⋯ is owner-only (the card hides it for other users, who use the inline
+  // Ask / Share / Report row instead).
   Future<void> _more(Load load) async {
-    if (!load.isOwn) {
-      // Non-owners report from the ⋯ menu too.
-      await _report(load);
-      return;
-    }
     final choice = await BusinessOptionsSheet.show(context);
     if (choice == null || !mounted) return;
     switch (choice) {
       case BusinessOption.edit:
-        AppOverlays.snack(context, 'Editing a post arrives soon.');
+        // Open the composer pre-filled with this post, then refresh on save.
+        final updated = await context.push<Load>(AppRoutes.createPost, extra: load);
+        if (updated == null || !mounted) return;
+        await context.read<FeedCubit>().refresh();
       case BusinessOption.boost:
         await _boost(load);
     }
@@ -159,9 +180,9 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
               builder: (context, state) => _Body(
                 state: state,
                 scroll: _scroll,
-                onShare: (_) =>
-                    AppOverlays.snack(context, 'Sharing opens the system share sheet.'),
+                onShare: _share,
                 onReport: _report,
+                onAsk: _ask,
                 onMore: _more,
               ),
             ),
@@ -178,12 +199,14 @@ class _Body extends StatelessWidget {
     required this.scroll,
     required this.onShare,
     required this.onReport,
+    required this.onAsk,
     required this.onMore,
   });
   final FeedState state;
   final ScrollController scroll;
   final ValueChanged<Load> onShare;
   final ValueChanged<Load> onReport;
+  final ValueChanged<Load> onAsk;
   final ValueChanged<Load> onMore;
 
   @override
@@ -239,6 +262,7 @@ class _Body extends StatelessWidget {
               }
               final load = entry as Load;
               return BusinessPostCard(
+                onAsk: () => onAsk(load),
                 key: ValueKey('biz_post_${load.id}'),
                 load: load,
                 onShare: () => onShare(load),

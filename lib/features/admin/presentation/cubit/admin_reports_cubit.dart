@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/models/load.dart';
 import '../../../../core/utils/result.dart';
 import '../../domain/entities/report.dart';
 import '../../domain/repositories/admin_repository.dart';
@@ -30,10 +31,19 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
 
   Future<void> refresh() => load();
 
-  Future<void> setFilter(ReportStatus filter) async {
+  Future<void> setFilter(ReportStatus? filter) async {
     if (filter == state.filter) return;
-    emit(state.copyWith(filter: filter, reports: const [], status: ReportsStatus.loading));
+    emit(state.withFilter(filter, status: ReportsStatus.loading));
     await load();
+  }
+
+  /// Fetches the reported post so the moderator can open its detail.
+  Future<Load?> fetchLoad(int id) async {
+    final result = await _repository.getLoad(id);
+    return switch (result) {
+      Success(value: final load) => load,
+      Err() => null,
+    };
   }
 
   /// Reviews/dismisses a report and drops it from the current (Pending) list.

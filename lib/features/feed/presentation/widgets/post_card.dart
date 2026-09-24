@@ -99,6 +99,7 @@ class PostCard extends StatelessWidget {
                   onAsk: onAsk,
                   onShare: onShare,
                   onDirectMessage: onDirectMessage,
+                  onReport: onReport,
                 ),
               ],
             ),
@@ -496,6 +497,7 @@ class _Actions extends StatelessWidget {
     this.onAsk,
     this.onShare,
     this.onDirectMessage,
+    this.onReport,
   });
   final Load load;
   final VoidCallback onRequest;
@@ -503,11 +505,13 @@ class _Actions extends StatelessWidget {
   final VoidCallback? onAsk;
   final VoidCallback? onShare;
   final VoidCallback? onDirectMessage;
+  final VoidCallback? onReport;
 
   @override
   Widget build(BuildContext context) {
     if (load.isOwn) {
-      // Owner sees a status pill instead of a request CTA.
+      // Owner sees a status pill instead of any action buttons (no
+      // Ask/Share/Offer/Report on your own post).
       return Align(
         alignment: Alignment.centerLeft,
         child: Text('Your post · ${load.status}',
@@ -515,48 +519,37 @@ class _Actions extends StatelessWidget {
       );
     }
 
-    final canOffer = load.canMakeOffer && onOffer != null;
-    final canAsk = load.canAskQuestion && onAsk != null;
-
-    // Secondary actions available on every non-own post: Ask + Share.
+    // Design "Post Detail" / Business feed: a HORIZONTAL action bar of equal
+    // columns, each an icon-on-top + label-below plain button (no box) — matching
+    // the business card exactly. Ask · Share · Offer · Report. Report is inline
+    // for other users' posts only (never on your own — guarded by !isOwn above).
     final secondary = <Widget>[
-      if (canAsk)
-        Expanded(
-          child: AppButton(
+      if (load.canAskQuestion && onAsk != null)
+        _ActionButton(
             label: 'Ask',
             icon: Icons.help_outline,
-            variant: AppButtonVariant.outline,
-            onPressed: onAsk,
-          ),
-        ),
-      if (canAsk && onShare != null) const SizedBox(width: AppSpacing.sm),
+            highlight: true,
+            onTap: onAsk!),
       if (onShare != null)
-        Expanded(
-          child: AppButton(
-            label: 'Share',
-            icon: Icons.share_outlined,
-            variant: AppButtonVariant.outline,
-            onPressed: onShare,
-          ),
-        ),
+        _ActionButton(label: 'Share', icon: Icons.ios_share, onTap: onShare!),
+      if (load.canMakeOffer && onOffer != null)
+        _ActionButton(
+            label: 'Offer', icon: Icons.sell_outlined, onTap: onOffer!),
+      if (load.canReport && onReport != null)
+        _ActionButton(
+            label: 'Report', icon: Icons.flag_outlined, onTap: onReport!),
     ];
+
+    final primary = _primaryCta(context);
+    final hasPrimary = primary is! SizedBox;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _primaryCta(context),
+        primary,
         if (secondary.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.sm),
-          Row(children: secondary),
-        ],
-        if (canOffer) ...[
-          const SizedBox(height: AppSpacing.sm),
-          AppButton(
-            label: 'Make an offer',
-            icon: Icons.local_offer_outlined,
-            variant: AppButtonVariant.tonal,
-            onPressed: onOffer,
-          ),
+          if (hasPrimary) const SizedBox(height: AppSpacing.sm),
+          Row(children: [for (final a in secondary) Expanded(child: a)]),
         ],
       ],
     );
@@ -584,7 +577,50 @@ class _Actions extends StatelessWidget {
       return AppButton(
           label: 'Request this post', icon: Icons.bolt, onPressed: onRequest);
     }
-    // Messaging not allowed and no chat yet — the offer button below stands in.
+    // Messaging not allowed and no chat yet — the secondary bar stands in.
     return const SizedBox.shrink();
+  }
+}
+
+/// One column in the horizontal action bar: an icon on top with a small label
+/// below, no button box — DITTO the design "Post Detail" action bar (and the
+/// post_detail_page `_ActionIcon`): Ask is accent-tinted (highlight), the rest
+/// use onSurface; icon 22, label 9px 700 secondary.
+class _ActionButton extends StatelessWidget {
+  const _ActionButton(
+      {required this.label,
+      required this.icon,
+      required this.onTap,
+      this.highlight = false});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final color = highlight
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurface;
+    return InkResponse(
+      onTap: onTap,
+      radius: 44,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: color),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: nex.textSecondary)),
+          ],
+        ),
+      ),
+    );
   }
 }

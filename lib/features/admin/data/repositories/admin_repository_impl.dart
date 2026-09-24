@@ -1,3 +1,4 @@
+import '../../../../core/models/load.dart';
 import '../../../../core/models/user.dart';
 import '../../../../core/network/api_response.dart';
 import '../../../../core/network/base_repository.dart';
@@ -14,10 +15,13 @@ class AdminRepositoryImpl with BaseRepository implements AdminRepository {
 
   @override
   Future<Result<PaginatedResponse<Report>>> getReports({
-    required ReportStatus status,
+    ReportStatus? status,
     int page = 1,
   }) =>
       guard(() => _remote.getReports(status: status, page: page));
+
+  @override
+  Future<Result<Load>> getLoad(int id) => guard(() => _remote.getLoad(id));
 
   @override
   Future<Result<Report>> updateReport({

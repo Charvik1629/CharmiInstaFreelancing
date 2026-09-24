@@ -1,5 +1,6 @@
 import '../../../../core/utils/result.dart';
 import '../../data/datasources/chat_remote_data_source.dart';
+import '../entities/broadcast_quota.dart';
 import '../entities/chat_label.dart';
 import '../entities/chat_message.dart';
 import '../entities/conversation.dart';
@@ -24,6 +25,9 @@ abstract class ChatRepository {
     List<String> attachmentPaths = const [],
   });
 
+  /// Reads the broadcast free-message quota (`meta.broadcast_message_quota`).
+  Future<Result<BroadcastQuota?>> getBroadcastQuota(int id);
+
   /// Edit a text message (server enforces the ≤1h window).
   Future<Result<ChatMessage>> editMessage(
       int conversationId, int messageId, String body);
@@ -41,11 +45,18 @@ abstract class ChatRepository {
   /// GET /messages/starred — every message you've starred, newest first.
   Future<Result<List<ChatMessage>>> getStarredMessages();
 
-  /// Send a location or contact message.
+  /// Send a location message (type + meta payload).
   Future<Result<ChatMessage>> sendMeta({
     required int conversationId,
     required String type,
     required Map<String, dynamic> meta,
+  });
+
+  /// Send a one-to-one inquiry (question + optional INR price). Direct only.
+  Future<Result<ChatMessage>> sendInquiry({
+    required int conversationId,
+    required String body,
+    String? price,
   });
 
   /// Block a user.

@@ -6,6 +6,7 @@ import 'pin_settings.dart';
 abstract class SecurityRepository {
   Future<Result<PinSettings>> getPin();
   Future<Result<PinSettings>> setPin({required String mode, String? pin});
+  Future<Result<PinSettings>> setEnabled(bool enabled);
 }
 
 class SecurityRepositoryImpl with BaseRepository implements SecurityRepository {
@@ -19,4 +20,8 @@ class SecurityRepositoryImpl with BaseRepository implements SecurityRepository {
   @override
   Future<Result<PinSettings>> setPin({required String mode, String? pin}) =>
       guard(() => _remote.setPin(mode: mode, pin: pin));
+
+  @override
+  Future<Result<PinSettings>> setEnabled(bool enabled) =>
+      guard(() => _remote.setEnabled(enabled));
 }

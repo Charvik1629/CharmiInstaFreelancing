@@ -133,11 +133,12 @@ class _FeedViewState extends State<_FeedView> {
 
   Future<void> _share(Load load) async {
     final by = load.author?.name;
+    // Share the post's canonical link (API share_url) — not just plain text.
     final text = [
       load.title,
       if (by != null) 'by $by',
-      'on Nexveero',
-    ].join(' ');
+      if ((load.shareUrl ?? '').isNotEmpty) load.shareUrl,
+    ].whereType<String>().join(' ');
     await SharePlus.instance.share(ShareParams(text: text));
   }
 
@@ -396,7 +397,9 @@ class _GradientWordmark extends StatelessWidget {
     return ShaderMask(
       shaderCallback: (rect) => context.nexveero.primaryGradient.createShader(rect),
       child: Text(
-        'Nexveero',
+        // Design "Home Feed" wordmark is the section label "Post" (the Business
+        // feed likewise uses "Business"), rendered in the primary gradient.
+        'Post',
         style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.white),
       ),
     );

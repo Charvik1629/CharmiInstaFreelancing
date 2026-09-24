@@ -26,7 +26,10 @@ class MakeOfferSheet {
         create: (_) => MakeOfferCubit(sl<OffersRepository>(), loadId),
         child: _MakeOfferForm(loadTitle: loadTitle),
       ),
-    );
+    ).whenComplete(() {
+      // Never leave the keyboard up after the sheet closes.
+      FocusManager.instance.primaryFocus?.unfocus();
+    });
   }
 }
 
@@ -95,6 +98,8 @@ class _MakeOfferFormState extends State<_MakeOfferForm> {
           listenWhen: (p, c) => p.status != c.status,
           listener: (context, state) {
             if (state.status == MakeOfferStatus.success) {
+              // Dismiss the keyboard, then close the sheet.
+              FocusScope.of(context).unfocus();
               Navigator.of(context).pop(state.created);
             } else if (state.status == MakeOfferStatus.failure &&
                 state.fieldErrors.isEmpty) {

@@ -103,13 +103,13 @@ class _IconBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 56,
-      height: 56,
+      width: 70,
+      height: 70,
       decoration: BoxDecoration(
-        gradient: context.nexveero.primaryGradient,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        color: context.nexveero.gradientEnd.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
       ),
-      child: Icon(icon, color: Colors.white, size: 30),
+      child: Icon(icon, color: context.nexveero.gradientEnd, size: 36),
     );
   }
 }

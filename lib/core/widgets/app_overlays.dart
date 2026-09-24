@@ -152,7 +152,11 @@ class AppOverlays {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: isScrollControlled,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => GestureDetector(
+        // Tap on empty sheet area dismisses the keyboard (fields still focus).
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(ctx).unfocus(),
+        child: SafeArea(
         child: Padding(
           // Lift the sheet above the on-screen keyboard so text fields inside it
           // (Ask a question, Make an offer, …) stay visible while typing.
@@ -178,8 +182,13 @@ class AppOverlays {
             ],
           ),
         ),
+        ),
       ),
-    );
+    ).whenComplete(() {
+      // Ensure the keyboard is dismissed once the sheet closes (e.g. after an
+      // API call pops it), so it never lingers over the screen behind.
+      FocusManager.instance.primaryFocus?.unfocus();
+    });
   }
 
   /// Snackbar with an optional action (design: "Post published · Undo").

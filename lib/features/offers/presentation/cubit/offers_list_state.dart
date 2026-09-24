@@ -5,7 +5,7 @@ enum OffersStatus { initial, loading, loaded, empty, error }
 class OffersListState extends Equatable {
   const OffersListState({
     this.status = OffersStatus.initial,
-    this.tag = OfferTag.received,
+    this.tag = OfferTag.all,
     this.offers = const [],
     this.page = 1,
     this.hasMore = true,

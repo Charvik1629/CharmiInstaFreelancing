@@ -37,37 +37,62 @@ class _SearchView extends StatefulWidget {
 
 class _SearchViewState extends State<_SearchView> {
   final _controller = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // Repaint the accent focus border as the field gains/loses focus.
+    _focus.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
+    _focus.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final focused = _focus.hasFocus;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
+        // Taller bar so the search field has comfortable padding.
+        toolbarHeight: 72,
         title: Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.lg),
+          // Design: full-width bar with a side gutter (padding 8 20 12).
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, 0, AppSpacing.lg, 0),
           child: Container(
             decoration: BoxDecoration(
               color: context.nexveero.elevated,
-              borderRadius: BorderRadius.circular(AppRadius.full),
+              // Design: rounded-12 field (not a pill), 1.5px accent border on
+              // focus, subtle border otherwise.
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: focused ? primary : context.nexveero.border,
+                width: focused ? 1.5 : 1,
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.search, size: 20, color: context.nexveero.textSecondary),
-                const SizedBox(width: AppSpacing.sm),
+                Icon(Icons.search,
+                    size: 19,
+                    color: focused ? primary : context.nexveero.textSecondary),
+                const SizedBox(width: 9),
                 Expanded(
                   child: TextField(
                     controller: _controller,
+                    focusNode: _focus,
                     textInputAction: TextInputAction.search,
                     onChanged: (v) => context.read<SearchCubit>().onQueryChanged(v),
-                    // The pill container is the field's surface, so strip the
-                    // theme's fill + focus border (otherwise a box-in-a-box).
+                    // The container is the field's surface, so strip the theme's
+                    // fill + focus border (otherwise a box-in-a-box).
                     decoration: const InputDecoration(
                       isDense: true,
                       filled: false,

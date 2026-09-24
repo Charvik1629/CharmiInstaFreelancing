@@ -16,6 +16,12 @@ class ChatMessage extends Equatable {
     this.isBroadcast = false,
     this.isSystem = false,
     this.isStarred = false,
+    this.isInquiry = false,
+    this.inquiryPrice,
+    this.isLocation = false,
+    this.locationLabel,
+    this.latitude,
+    this.longitude,
     this.conversationId,
     this.order,
     this.createdAt,
@@ -43,6 +49,24 @@ class ChatMessage extends Equatable {
 
   /// Whether the current user has starred this message.
   final bool isStarred;
+
+  /// A one-to-one Inquiry card (`type: "inquiry"`) — renders as a special
+  /// bubble with the question and an optional price.
+  final bool isInquiry;
+
+  /// Formatted INR price for an inquiry (`meta.price_formatted`, e.g. "₹1,499").
+  final String? inquiryPrice;
+
+  /// A shared location card (`type: "location"`) — renders as a pin + label,
+  /// tappable to open the coordinates in a maps app.
+  final bool isLocation;
+
+  /// Optional place label for a location message (`meta.label`).
+  final String? locationLabel;
+
+  /// Coordinates for a location message (`meta.lat` / `meta.lng`).
+  final double? latitude;
+  final double? longitude;
 
   /// Owning conversation id (set on the starred-messages list, for navigation).
   final int? conversationId;
@@ -77,6 +101,12 @@ class ChatMessage extends Equatable {
         isBroadcast: isBroadcast,
         isSystem: isSystem,
         isStarred: isStarred ?? this.isStarred,
+        isInquiry: isInquiry,
+        inquiryPrice: inquiryPrice,
+        isLocation: isLocation,
+        locationLabel: locationLabel,
+        latitude: latitude,
+        longitude: longitude,
         conversationId: conversationId,
         order: order,
         createdAt: createdAt,
@@ -86,6 +116,7 @@ class ChatMessage extends Equatable {
     final sender = json.asMap('sender');
     final orderJson = json.asMap('order');
     final type = json.asString('type');
+    final meta = json.asMap('meta');
     final isOrderType = type == 'order' || orderJson != null;
     final attachments = json['attachments'];
     String? image;
@@ -114,6 +145,12 @@ class ChatMessage extends Equatable {
       isBroadcast: json.asBool('is_broadcast'),
       isSystem: type == 'system',
       isStarred: json.asBool('is_starred'),
+      isInquiry: type == 'inquiry',
+      inquiryPrice: meta?.asString('price_formatted'),
+      isLocation: type == 'location',
+      locationLabel: meta?.asString('label'),
+      latitude: meta?.asDouble('lat'),
+      longitude: meta?.asDouble('lng'),
       conversationId: json.asInt('conversation_id'),
       order: isOrderType ? MessageOrder.fromJson(orderJson ?? json) : null,
       createdAt: json.asDate('created_at'),
@@ -133,6 +170,12 @@ class ChatMessage extends Equatable {
         isBroadcast,
         isSystem,
         isStarred,
+        isInquiry,
+        inquiryPrice,
+        isLocation,
+        locationLabel,
+        latitude,
+        longitude,
         conversationId,
         order,
         createdAt,

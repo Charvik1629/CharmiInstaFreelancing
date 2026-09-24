@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -7,8 +9,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../cubit/security_cubit.dart';
 
-/// Security · chat PIN (design "Set PIN"). Choose a fixed 4-digit PIN, or let
-/// the app issue a random PIN each chat.
+/// Security · chat PIN (design "Set PIN"). A master toggle, then choose a fixed
+/// 4-digit PIN ("Set your own") or a per-chat random PIN ("Random").
 class SecurityPage extends StatelessWidget {
   const SecurityPage({super.key});
 
@@ -29,9 +31,15 @@ class _SecurityView extends StatefulWidget {
 }
 
 class _SecurityViewState extends State<_SecurityView> {
-  bool _own = false;
+  bool _own = true; // design: "Set your own" is the first (left) segment
+  bool _enabled = false;
   final _pin = TextEditingController();
   bool _seeded = false;
+  // Illustrative random PIN shown in Random mode (the real one is issued
+  // per-chat by the server, so this "refreshes on each chat").
+  late String _sample = _randomPin();
+
+  static String _randomPin() => (Random().nextInt(9000) + 1000).toString();
 
   @override
   void dispose() {
@@ -44,7 +52,8 @@ class _SecurityViewState extends State<_SecurityView> {
     return Scaffold(
       appBar: AppBar(title: const Text('Security')),
       body: BlocConsumer<SecurityCubit, SecurityState>(
-        listenWhen: (p, c) => p.saved != c.saved || p.errorMessage != c.errorMessage,
+        listenWhen: (p, c) =>
+            p.saved != c.saved || p.errorMessage != c.errorMessage,
         listener: (context, state) {
           if (state.saved) {
             AppOverlays.snack(context, 'Chat PIN saved');
@@ -65,62 +74,128 @@ class _SecurityViewState extends State<_SecurityView> {
           }
           if (!_seeded) {
             _own = state.settings.isOwn;
+            _enabled = state.settings.enabled;
             _seeded = true;
           }
           return ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
-              Text('Chat PIN', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: AppSpacing.xs),
-              Text('Protect who can open your chats.',
-                  style: TextStyle(color: context.nexveero.textSecondary)),
+              _card(context, child: _toggleRow(context, state)),
               const SizedBox(height: AppSpacing.lg),
-              AppSegmented(
-                segments: const ['Random', 'Set your own'],
-                selectedIndex: _own ? 1 : 0,
-                onChanged: (i) => setState(() => _own = i == 1),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              if (_own)
-                AppTextField(
-                  controller: _pin,
-                  label: 'Enter 4-digit PIN',
-                  hint: 'Enter PIN',
-                  keyboardType: TextInputType.number,
-                  maxLength: 4,
-                  obscure: true,
-                  prefixIcon: Icons.lock_outline,
-                )
+              if (!_enabled)
+                _infoBox(context,
+                    'Turn on Set PIN to choose Set your own or Random.')
               else
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  decoration: BoxDecoration(
-                    color: context.nexveero.elevated,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.autorenew, color: context.nexveero.textSecondary),
-                      const SizedBox(width: AppSpacing.md),
-                      const Expanded(
-                        child: Text('A fresh PIN is generated for each new chat.'),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: AppSpacing.xl),
-              AppButton(
-                label: 'Save',
-                isLoading: state.saving,
-                onPressed: () => context.read<SecurityCubit>().save(
-                      mode: _own ? 'own' : 'random',
-                      pin: _own ? _pin.text.trim() : null,
-                    ),
-              ),
+                _card(context, child: _pinOptions(context, state)),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _card(BuildContext context, {required Widget child}) => Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: context.nexveero.border),
+        ),
+        child: child,
+      );
+
+  Widget _toggleRow(BuildContext context, SecurityState state) => Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Set PIN',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text('Choose how your chat PIN is created',
+                    style: TextStyle(color: context.nexveero.textSecondary)),
+              ],
+            ),
+          ),
+          Switch(
+            value: _enabled,
+            onChanged: state.saving
+                ? null
+                : (v) {
+                    setState(() => _enabled = v);
+                    context.read<SecurityCubit>().setEnabled(v);
+                  },
+          ),
+        ],
+      );
+
+  Widget _infoBox(BuildContext context, String text) => Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: context.nexveero.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(children: [
+          Icon(Icons.info_outline,
+              color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(child: Text(text)),
+        ]),
+      );
+
+  Widget _pinOptions(BuildContext context, SecurityState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppSegmented(
+          // Design order: "Set your own" first, "Random" second.
+          segments: const ['Set your own', 'Random'],
+          selectedIndex: _own ? 0 : 1,
+          onChanged: (i) {
+            setState(() {
+              _own = i == 0;
+              if (!_own) _sample = _randomPin();
+            });
+            // Random needs no PIN input, so it saves immediately (design has no
+            // Submit on the Random screen).
+            if (!_own) context.read<SecurityCubit>().save(mode: 'random');
+          },
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (_own) ...[
+          Text('Enter 4-digit PIN',
+              style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: AppSpacing.md),
+          // Password-style: digits mask to dots as you type (numeric keyboard).
+          PinCells(controller: _pin, mask: true),
+          const SizedBox(height: AppSpacing.lg),
+          AppButton(
+            label: 'Submit',
+            isLoading: state.saving,
+            onPressed: () => context
+                .read<SecurityCubit>()
+                .save(mode: 'own', pin: _pin.text.trim()),
+          ),
+        ] else ...[
+          Text('Your PIN', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: AppSpacing.md),
+          PinCells.display(_sample),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.autorenew,
+                  size: 16, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 6),
+              Text('Refreshes on each chat',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

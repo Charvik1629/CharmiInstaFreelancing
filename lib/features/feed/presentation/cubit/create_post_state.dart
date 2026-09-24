@@ -12,6 +12,7 @@ class CreatePostState extends Equatable {
     this.body = '',
     this.selectedTypeId,
     this.imagePaths = const [],
+    this.existingImageUrls = const [],
     this.selectedTags = const [],
     this.submitStatus = SubmitStatus.idle,
     this.errorMessage,
@@ -31,6 +32,10 @@ class CreatePostState extends Equatable {
   /// currently accepts only one image, so the first is the cover that gets
   /// uploaded — see [coverImagePath].
   final List<String> imagePaths;
+
+  /// Existing (already-uploaded) image URLs shown when editing a post. Display
+  /// only — they can't be removed here, but the user sees the current photos.
+  final List<String> existingImageUrls;
 
   /// Tags the user attached (from GET /tags).
   final List<Tag> selectedTags;
@@ -64,6 +69,7 @@ class CreatePostState extends Equatable {
     String? body,
     int? selectedTypeId,
     List<String>? imagePaths,
+    List<String>? existingImageUrls,
     List<Tag>? selectedTags,
     SubmitStatus? submitStatus,
     String? errorMessage,
@@ -79,6 +85,7 @@ class CreatePostState extends Equatable {
       body: body ?? this.body,
       selectedTypeId: selectedTypeId ?? this.selectedTypeId,
       imagePaths: imagePaths ?? this.imagePaths,
+      existingImageUrls: existingImageUrls ?? this.existingImageUrls,
       selectedTags: selectedTags ?? this.selectedTags,
       submitStatus: submitStatus ?? this.submitStatus,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -96,6 +103,7 @@ class CreatePostState extends Equatable {
         body,
         selectedTypeId,
         imagePaths,
+        existingImageUrls,
         selectedTags,
         submitStatus,
         errorMessage,

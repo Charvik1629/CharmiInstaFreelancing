@@ -1,5 +1,6 @@
 import '../../../../core/network/base_repository.dart';
 import '../../../../core/utils/result.dart';
+import '../../domain/entities/broadcast_quota.dart';
 import '../../domain/entities/chat_label.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
@@ -44,6 +45,10 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
           id: id, type: type, body: body, attachmentPaths: attachmentPaths));
 
   @override
+  Future<Result<BroadcastQuota?>> getBroadcastQuota(int id) =>
+      guard(() => _remote.getBroadcastQuota(id));
+
+  @override
   Future<Result<ChatMessage>> editMessage(
           int conversationId, int messageId, String body) =>
       guard(() => _remote.editMessage(conversationId, messageId, body));
@@ -75,6 +80,15 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
   }) =>
       guard(() =>
           _remote.sendMeta(conversationId: conversationId, type: type, meta: meta));
+
+  @override
+  Future<Result<ChatMessage>> sendInquiry({
+    required int conversationId,
+    required String body,
+    String? price,
+  }) =>
+      guard(() => _remote.sendInquiry(
+          conversationId: conversationId, body: body, price: price));
 
   @override
   Future<Result<void>> blockUser(int userId) =>

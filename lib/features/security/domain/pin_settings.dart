@@ -6,12 +6,15 @@ import '../../../core/extensions/json_extensions.dart';
 /// 4-digit PIN; `random` = the app issues a fresh PIN each chat.
 class PinSettings extends Equatable {
   const PinSettings({
+    this.enabled = false,
     this.mode = 'random',
     this.configured = false,
     this.hasOwnPin = false,
     this.refreshesOnEachChat = false,
   });
 
+  /// Master "Set PIN" toggle. When false, chats need no PIN.
+  final bool enabled;
   final String mode;
   final bool configured;
   final bool hasOwnPin;
@@ -20,6 +23,8 @@ class PinSettings extends Equatable {
   bool get isOwn => mode == 'own';
 
   factory PinSettings.fromJson(Map<String, dynamic> json) => PinSettings(
+        enabled: json.asBool('enabled'),
+        // API returns mode: null when the toggle is off; fall back to 'random'.
         mode: json.asStringOr('mode', 'random'),
         configured: json.asBool('configured'),
         hasOwnPin: json.asBool('has_own_pin'),
@@ -27,5 +32,6 @@ class PinSettings extends Equatable {
       );
 
   @override
-  List<Object?> get props => [mode, configured, hasOwnPin, refreshesOnEachChat];
+  List<Object?> get props =>
+      [enabled, mode, configured, hasOwnPin, refreshesOnEachChat];
 }

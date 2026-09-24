@@ -26,8 +26,7 @@ class AdminBroadcastGroupsPage extends StatelessWidget {
       body: EmptyView(
         title: 'No broadcast groups yet',
         subtitle:
-            'Create reusable recipient groups to target broadcasts. Turns on '
-            'once the backend adds broadcast-group endpoints.',
+            'Create reusable recipient groups to target broadcasts.',
         icon: Icons.groups_2_outlined,
         actionLabel: 'Create group',
         onAction: () => context.push(AppRoutes.createBroadcastGroup),

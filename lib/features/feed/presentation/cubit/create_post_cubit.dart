@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/models/load.dart';
 import '../../../../core/models/post_type.dart';
+import '../../../../core/utils/media_url.dart';
 import '../../../../core/utils/result.dart';
 import '../../../post_types/domain/repositories/post_type_repository.dart';
 import '../../../tags/domain/entities/tag.dart';
@@ -25,13 +26,19 @@ class CreatePostCubit extends Cubit<CreatePostState> {
   /// Set when editing an existing post; drives update vs create on submit.
   int? _editLoadId;
 
-  /// Prefills the composer to edit [load].
+  /// Prefills the composer to edit [load] — title, body, category, the already
+  /// attached tags, and the existing photos (shown for reference).
   void seedForEdit(Load load) {
     _editLoadId = load.id;
+    final existing = [
+      for (final m in load.imageMedia) ?MediaUrl.resolve(m.url),
+    ];
     emit(state.copyWith(
       title: load.title,
       body: load.body ?? '',
       selectedTypeId: load.postType?.id,
+      existingImageUrls: existing,
+      selectedTags: load.tags,
       editing: true,
     ));
   }

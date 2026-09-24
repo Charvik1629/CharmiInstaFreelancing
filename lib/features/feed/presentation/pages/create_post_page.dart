@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -206,10 +207,13 @@ class _ImageStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CreatePostCubit, CreatePostState>(
-      buildWhen: (p, c) => p.imagePaths != c.imagePaths,
+      buildWhen: (p, c) =>
+          p.imagePaths != c.imagePaths ||
+          p.existingImageUrls != c.existingImageUrls,
       builder: (context, state) {
         final cubit = context.read<CreatePostCubit>();
         final paths = state.imagePaths;
+        final existing = state.existingImageUrls;
         // Design: a 3-column grid of square tiles (repeat(3,1fr), 8px gap); the
         // "Add" tile is simply the next cell. Long-press a thumbnail to reorder.
         return Column(
@@ -222,6 +226,9 @@ class _ImageStrip extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
+                // Existing (already-uploaded) photos — shown for reference when
+                // editing. Read-only (no reorder/remove).
+                for (final url in existing) _ExistingThumb(url: url),
                 for (var i = 0; i < paths.length; i++)
                   DragTarget<int>(
                     key: ValueKey(paths[i]),
@@ -326,6 +333,49 @@ class _Thumb extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: SizedBox(width: size, height: size, child: tile),
+    );
+  }
+}
+
+/// An already-uploaded photo shown when editing a post. Read-only (a small
+/// badge marks it as current); it can't be reordered or removed here.
+class _ExistingThumb extends StatelessWidget {
+  const _ExistingThumb({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            fit: BoxFit.cover,
+            placeholder: (_, _) =>
+                const ImagePlaceholder(role: PlaceholderRole.post, radius: 12),
+            errorWidget: (_, _, _) =>
+                const ImagePlaceholder(role: PlaceholderRole.post, radius: 12),
+          ),
+        ),
+        Positioned(
+          left: 6,
+          bottom: 6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Text('Current',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -532,7 +582,7 @@ class _CaptionCardState extends State<_CaptionCard> {
                   focusedBorder: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   counterText: '',
-                  hintText: 'Write something…',
+                  hintText: 'Add a caption…',
                   errorText: state.fieldErrors['title'],
                 ),
               ),

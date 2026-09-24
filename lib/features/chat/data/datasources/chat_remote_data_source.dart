@@ -4,6 +4,7 @@ import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/extensions/json_extensions.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_response.dart';
+import '../../domain/entities/broadcast_quota.dart';
 import '../../domain/entities/chat_label.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
@@ -48,6 +49,11 @@ abstract class ChatRemoteDataSource {
     List<String> attachmentPaths = const [],
   });
 
+  /// GET /broadcasts/{id}/messages?per_page=1 — reads only `meta.
+  /// broadcast_message_quota` so we know the free-message allowance BEFORE the
+  /// first send. Returns null when the meta block is absent.
+  Future<BroadcastQuota?> getBroadcastQuota(int id);
+
   /// PATCH /conversations/{id}/messages/{msgId} — edit a text message (≤1h).
   Future<ChatMessage> editMessage(int conversationId, int messageId, String body);
 
@@ -58,11 +64,20 @@ abstract class ChatRemoteDataSource {
   Future<void> pinConversation(int conversationId, {required bool pin});
   Future<List<ChatMessage>> getStarredMessages();
 
-  /// POST /conversations/{id}/messages with a location/contact meta payload.
+  /// POST /conversations/{id}/messages with a location meta payload.
   Future<ChatMessage> sendMeta({
     required int conversationId,
     required String type,
     required Map<String, dynamic> meta,
+  });
+
+  /// POST /conversations/{id}/messages with `type: inquiry` — a one-to-one
+  /// inquiry ([body] required) with an optional INR [price] in `meta.price`.
+  /// Direct chats only.
+  Future<ChatMessage> sendInquiry({
+    required int conversationId,
+    required String body,
+    String? price,
   });
 
   /// POST /users/{id}/block — block a user.
@@ -180,6 +195,17 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   }
 
   @override
+  Future<BroadcastQuota?> getBroadcastQuota(int id) async {
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.broadcastMessages(id),
+      query: {'per_page': 1},
+    );
+    final quota =
+        res.data?.asMap('meta')?.asMap('broadcast_message_quota');
+    return quota == null ? null : BroadcastQuota.fromJson(quota);
+  }
+
+  @override
   Future<ChatMessage> editMessage(
       int conversationId, int messageId, String body) async {
     final res = await _client.patch<Map<String, dynamic>>(
@@ -234,6 +260,23 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.conversationMessages(conversationId),
       data: {'type': type, 'meta': meta},
+    );
+    return ApiEnvelope.object(res.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<ChatMessage> sendInquiry({
+    required int conversationId,
+    required String body,
+    String? price,
+  }) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.conversationMessages(conversationId),
+      data: {
+        'type': 'inquiry',
+        'body': body,
+        if (price != null && price.isNotEmpty) 'meta': {'price': price},
+      },
     );
     return ApiEnvelope.object(res.data, ChatMessage.fromJson);
   }

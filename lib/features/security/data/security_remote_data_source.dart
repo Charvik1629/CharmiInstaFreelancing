@@ -6,6 +6,7 @@ import '../domain/pin_settings.dart';
 abstract class SecurityRemoteDataSource {
   Future<PinSettings> getPin();
   Future<PinSettings> setPin({required String mode, String? pin});
+  Future<PinSettings> setEnabled(bool enabled);
 }
 
 class SecurityRemoteDataSourceImpl implements SecurityRemoteDataSource {
@@ -24,6 +25,16 @@ class SecurityRemoteDataSourceImpl implements SecurityRemoteDataSource {
     final res = await _client.put<Map<String, dynamic>>(
       ApiEndpoints.securityPin,
       data: {'mode': mode, 'pin': ?pin},
+    );
+    return ApiEnvelope.object(res.data, PinSettings.fromJson);
+  }
+
+  @override
+  Future<PinSettings> setEnabled(bool enabled) async {
+    // Master toggle: the API exposes an `enabled` boolean on PUT /security/pin.
+    final res = await _client.put<Map<String, dynamic>>(
+      ApiEndpoints.securityPin,
+      data: {'enabled': enabled},
     );
     return ApiEnvelope.object(res.data, PinSettings.fromJson);
   }

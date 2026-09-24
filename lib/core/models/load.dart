@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import '../../features/tags/domain/entities/tag.dart';
 import '../extensions/json_extensions.dart';
 import 'author.dart';
 import 'post_type.dart';
@@ -67,6 +68,8 @@ class Load extends Equatable {
     this.canReport = false,
     this.viewerHasRequested = false,
     this.conversationId,
+    this.shareUrl,
+    this.tags = const [],
     this.createdAt,
   });
 
@@ -98,6 +101,12 @@ class Load extends Equatable {
   final bool canReport;
   final bool viewerHasRequested;
   final int? conversationId;
+
+  /// Canonical HTTPS link for the Share button (API `share_url`).
+  final String? shareUrl;
+
+  /// Tags attached to the post (API `tags`) — used to pre-select on edit.
+  final List<Tag> tags;
   final DateTime? createdAt;
 
   bool get hasImage => mediaKind == MediaKind.image && (mediaUrl?.isNotEmpty ?? false);
@@ -135,11 +144,21 @@ class Load extends Equatable {
       canReport: json.asBool('can_report'),
       viewerHasRequested: json.asBool('viewer_has_requested'),
       conversationId: json.asInt('conversation_id'),
+      shareUrl: json.asString('share_url'),
+      tags: _parseTags(json['tags']),
       createdAt: json.asDate('created_at'),
     );
   }
 
   static MediaKind _kind(String? raw) => mediaKindFromString(raw);
+
+  static List<Tag> _parseTags(Object? raw) {
+    if (raw is! List) return const [];
+    return [
+      for (final e in raw)
+        if (e is Map) Tag.fromJson(Map<String, dynamic>.from(e)),
+    ];
+  }
 
   /// Reads the `media[]` array; falls back to a single item synthesized from the
   /// legacy `media_url`/`media_mime`/`media_kind` cover fields.
@@ -197,6 +216,8 @@ class Load extends Equatable {
       canReport: canReport,
       viewerHasRequested: viewerHasRequested ?? this.viewerHasRequested,
       conversationId: conversationId ?? this.conversationId,
+      shareUrl: shareUrl,
+      tags: tags,
       createdAt: createdAt,
     );
   }
