@@ -20,6 +20,7 @@ class BusinessPostCard extends StatelessWidget {
     required this.onReport,
     this.onAsk,
     this.onMore,
+    this.onAuthorTap,
   });
 
   final Load load;
@@ -29,6 +30,9 @@ class BusinessPostCard extends StatelessWidget {
   /// Ask a question about the post (can_ask_question). Null hides the action.
   final VoidCallback? onAsk;
   final VoidCallback? onMore;
+
+  /// Opens the author's profile when their avatar/name is tapped.
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -56,33 +60,44 @@ class BusinessPostCard extends StatelessWidget {
                 AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.sm),
             child: Row(
               children: [
-                AppAvatar(
-                    name: load.author?.name ?? '?',
-                    imageUrl: MediaUrl.resolve(load.author?.avatarUrl),
-                    size: 36),
+                GestureDetector(
+                  onTap: (onAuthorTap != null && load.author?.id != null)
+                      ? onAuthorTap
+                      : null,
+                  child: AppAvatar(
+                      name: load.author?.name ?? '?',
+                      imageUrl: MediaUrl.resolve(load.author?.avatarUrl),
+                      size: 36),
+                ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(load.author?.name ?? 'Business',
-                                style: texts.titleMedium,
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.verified,
-                              size: 15,
-                              color: Theme.of(context).colorScheme.primary),
-                        ],
-                      ),
-                      if (load.createdAt != null)
-                        Text(load.createdAt!.timeAgo,
-                            style: texts.bodySmall
-                                ?.copyWith(color: nex.textSecondary)),
-                    ],
+                  child: GestureDetector(
+                    onTap: (onAuthorTap != null && load.author?.id != null)
+                        ? onAuthorTap
+                        : null,
+                    behavior: HitTestBehavior.opaque,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(load.author?.name ?? 'Business',
+                                  style: texts.titleMedium,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.verified,
+                                size: 15,
+                                color: Theme.of(context).colorScheme.primary),
+                          ],
+                        ),
+                        if (load.createdAt != null)
+                          Text(load.createdAt!.timeAgo,
+                              style: texts.bodySmall
+                                  ?.copyWith(color: nex.textSecondary)),
+                      ],
+                    ),
                   ),
                 ),
                 if (load.isBoosted) const _BoostedTag(),

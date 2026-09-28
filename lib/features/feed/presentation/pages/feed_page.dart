@@ -379,6 +379,10 @@ class _FeedBody extends StatelessWidget {
                 onShare: () => onShare(load),
                 onDirectMessage: () => onDirectMessage(load),
                 onTap: () => context.push(AppRoutes.postDetail, extra: load),
+                onAuthorTap: load.author?.id == null
+                    ? null
+                    : () => context.push(AppRoutes.userProfile,
+                        extra: load.author!.id),
                 onBoost: () => onBoost(load),
                 onMarkSold: () => onMarkSold(load),
                 onEditDeferred: () =>

@@ -12,6 +12,9 @@ abstract class FeedRepository {
   /// Creates a post; on success returns the created [Load].
   Future<Result<Load>> createLoad(NewPost post);
 
+  /// GET /loads/{id} — a single post (e.g. to open a question's linked post).
+  Future<Result<Load>> getLoad(int id);
+
   /// Updates an owned post. Returns the updated [Load].
   Future<Result<Load>> updateLoad(int id, NewPost post);
 

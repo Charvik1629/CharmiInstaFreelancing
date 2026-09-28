@@ -1,11 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection.dart';
 import '../widgets/full_image_view.dart';
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -155,6 +157,18 @@ class _Header extends StatelessWidget {
             Text(conversation.subtitle!,
                 style: TextStyle(color: nex.textSecondary),
                 textAlign: TextAlign.center),
+          ],
+          // Direct threads carry a peer id — offer a jump to their profile.
+          if (conversation.peerId != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            AppButton(
+              label: 'View business',
+              icon: Icons.storefront_outlined,
+              variant: AppButtonVariant.outline,
+              expanded: false,
+              onPressed: () => context.push(AppRoutes.userProfile,
+                  extra: conversation.peerId!),
+            ),
           ],
         ],
       ),

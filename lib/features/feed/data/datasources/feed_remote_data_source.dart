@@ -20,6 +20,9 @@ abstract class FeedRemoteDataSource {
   /// attached, otherwise a plain JSON body. Returns the created [Load].
   Future<Load> createLoad(NewPost post);
 
+  /// GET /loads/{id} — a single post.
+  Future<Load> getLoad(int id);
+
   /// Updates an owned post (POST /loads/{id} — the API accepts POST for updates
   /// so multipart image edits work). Returns the updated [Load].
   Future<Load> updateLoad(int id, NewPost post);
@@ -97,6 +100,13 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
       ApiEndpoints.loads,
       data: await _loadBody(post),
     );
+    return ApiEnvelope.object(res.data, Load.fromJson);
+  }
+
+  @override
+  Future<Load> getLoad(int id) async {
+    final res =
+        await _client.get<Map<String, dynamic>>(ApiEndpoints.load(id));
     return ApiEnvelope.object(res.data, Load.fromJson);
   }
 

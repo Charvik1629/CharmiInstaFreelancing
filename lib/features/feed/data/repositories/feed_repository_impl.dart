@@ -23,6 +23,9 @@ class FeedRepositoryImpl with BaseRepository implements FeedRepository {
       guard(() => _remote.createLoad(post));
 
   @override
+  Future<Result<Load>> getLoad(int id) => guard(() => _remote.getLoad(id));
+
+  @override
   Future<Result<Load>> updateLoad(int id, NewPost post) =>
       guard(() => _remote.updateLoad(id, post));
 

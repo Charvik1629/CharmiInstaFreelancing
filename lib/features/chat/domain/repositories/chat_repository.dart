@@ -63,6 +63,9 @@ abstract class ChatRepository {
   Future<Result<void>> blockUser(int userId);
 
   Future<Result<void>> markRead(int conversationId);
+
+  /// The peer's read cursor for 1:1 read ticks (`peer_last_read_at`).
+  Future<Result<DateTime?>> getPeerLastRead(int id);
   Future<Result<UnreadCounts>> getUnreadCounts();
   Future<Result<bool>> chatPinRequired(int userId);
   Future<Result<Conversation>> startChat(int userId, {String? pin});

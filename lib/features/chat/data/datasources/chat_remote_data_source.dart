@@ -86,6 +86,10 @@ abstract class ChatRemoteDataSource {
   /// Marks a direct/group conversation read (no-op concept for broadcasts).
   Future<void> markRead(int conversationId);
 
+  /// GET /conversations/{id} → the peer's read cursor (`peer_last_read_at`) for
+  /// 1:1 read ticks. Null for groups/broadcasts or when unset.
+  Future<DateTime?> getPeerLastRead(int id);
+
   /// GET /chats/unread-count — badge totals (chats + questions + offers).
   Future<UnreadCounts> getUnreadCounts();
 
@@ -289,6 +293,15 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   @override
   Future<void> markRead(int conversationId) async {
     await _client.post<dynamic>(ApiEndpoints.conversationRead(conversationId));
+  }
+
+  @override
+  Future<DateTime?> getPeerLastRead(int id) async {
+    final res =
+        await _client.get<Map<String, dynamic>>(ApiEndpoints.conversation(id));
+    final data = res.data?['data'];
+    if (data is Map) return DateTime.tryParse('${data['peer_last_read_at']}');
+    return null;
   }
 
   @override

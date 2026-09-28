@@ -221,8 +221,22 @@ class ConversationCubit extends Cubit<ConversationState> {
         ));
         _markRead();
         _refreshBroadcastQuota();
+        _seedPeerRead();
       case Err(failure: final f):
         emit(state.copyWith(status: ThreadStatus.error, errorMessage: f.message));
+    }
+  }
+
+  /// Seeds the peer's read cursor on load (1:1 only), so ✓✓ shows immediately
+  /// without waiting for a live `message:read` socket event.
+  Future<void> _seedPeerRead() async {
+    if (conversation.type != ConversationType.direct) return;
+    final res = await _repository.getPeerLastRead(conversation.id);
+    if (res case Success(value: final at) when at != null && !isClosed) {
+      final prev = state.peerLastReadAt;
+      if (prev == null || at.isAfter(prev)) {
+        emit(state.copyWith(peerLastReadAt: at));
+      }
     }
   }
 

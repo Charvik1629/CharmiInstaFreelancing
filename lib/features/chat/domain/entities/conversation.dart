@@ -31,6 +31,7 @@ class Conversation extends Equatable {
     this.avatarUrl,
     this.peerId,
     this.groupId,
+    this.loadId,
     this.lastMessage,
     this.lastMessageAt,
     this.unreadCount = 0,
@@ -54,6 +55,9 @@ class Conversation extends Equatable {
 
   /// The group's id for a group conversation (opens Group details). Null otherwise.
   final int? groupId;
+
+  /// The related post's id for a question/offer conversation (drives "View post").
+  final int? loadId;
 
   /// A short preview of the last message (already collapsed from body /
   /// attachment). Null when the thread has no messages yet.
@@ -83,6 +87,7 @@ class Conversation extends Equatable {
           json.asMap('peer')?.asString('avatar_url'),
       peerId: json.asMap('peer')?.asInt('id'),
       groupId: json.asInt('group_id'),
+      loadId: json.asInt('load_id') ?? json.asMap('load')?.asInt('id'),
       lastMessage: _preview(last),
       lastMessageAt: last?.asDate('created_at'),
       unreadCount: json.asIntOr('unread_count', 0),
@@ -162,6 +167,7 @@ class Conversation extends Equatable {
         avatarUrl,
         peerId,
         groupId,
+        loadId,
         lastMessage,
         lastMessageAt,
         unreadCount,

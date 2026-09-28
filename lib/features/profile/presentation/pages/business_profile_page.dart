@@ -1,18 +1,25 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../chat/domain/repositories/chat_repository.dart';
 import '../cubit/business_profile_cubit.dart';
 
-/// Business Profile (design) — the viewer's own business page: verified &
-/// premium badges, about, products. Products/tags are gated until the backend
-/// returns them (BACKEND_REQUIREMENTS B1/C1); badges are live.
+/// Business Profile (design "Business Profile"): a gradient cover with back +
+/// share, a rounded-square avatar overlapping it, name + verified, role/handle,
+/// a business card, bio, a Posts stat (live from the API), a Chat action and the
+/// posts grid. Only the Posts count is bound to real data for now; products/tags
+/// stay design placeholders until the backend serves them.
 class BusinessProfilePage extends StatelessWidget {
   const BusinessProfilePage({super.key});
 
@@ -43,196 +50,333 @@ class _BusinessProfileView extends StatelessWidget {
               onRetry: () => context.read<BusinessProfileCubit>().load(),
             );
           }
-          final u = state.user!;
-          final nex = context.nexveero;
-          final texts = Theme.of(context).textTheme;
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(height: 120, decoration: BoxDecoration(gradient: nex.primaryGradient)),
-                    Positioned(
-                      top: 44, left: 8,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => context.pop(),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.lg, 82, AppSpacing.lg, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                                color: Theme.of(context).scaffoldBackgroundColor,
-                                borderRadius: BorderRadius.circular(24)),
-                            child: AppAvatar(
-                                name: u.businessName ?? u.name,
-                                imageUrl: MediaUrl.resolve(u.avatarUrl),
-                                size: 78),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(u.businessName ?? u.name,
-                                    style: texts.titleLarge
-                                        ?.copyWith(fontWeight: FontWeight.w800),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                              if (state.isVerified) ...[
-                                const SizedBox(width: 6),
-                                Icon(Icons.verified, size: 20, color: nex.gradientStart),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            if (state.isVerified) _badge(context, 'Verified', nex.success, const Color(0x1F1FA971)),
-                            if (state.isPremium) ...[
-                              const SizedBox(width: 6),
-                              _badge(context, 'Premium', nex.gradientStart, const Color(0x1F6C47FF)),
-                            ],
-                          ]),
-                          if ((u.bio ?? '').isNotEmpty) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            Text(u.bio!, style: texts.bodyMedium?.copyWith(color: nex.textSecondary)),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SliverToBoxAdapter(child: _goPremium(context, state)),
-              SliverToBoxAdapter(child: _sectionLabel(context, 'Products')),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      border: Border.all(color: context.nexveero.border),
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.grid_view_outlined,
-                            color: context.nexveero.iconInactive),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Text(
-                            'Products & tags appear here once you add them in Business '
-                            'details (and the backend serves them).',
-                            style: TextStyle(color: context.nexveero.textSecondary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(child: _sectionLabel(context, 'About')),
-              SliverToBoxAdapter(child: _about(context, u)),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
-          );
+          return _Body(user: state.user!, isVerified: state.isVerified);
         },
       ),
     );
   }
+}
 
-  Widget _badge(BuildContext c, String t, Color fg, Color bg) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-        child: Text(t, style: TextStyle(color: fg, fontSize: 11.5, fontWeight: FontWeight.w700)),
-      );
+class _Body extends StatelessWidget {
+  const _Body({required this.user, required this.isVerified});
 
-  Widget _sectionLabel(BuildContext c, String t) => Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 4),
-        child: Text(t, style: Theme.of(c).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-      );
+  final User user;
+  final bool isVerified;
 
-  Widget _goPremium(BuildContext context, BusinessProfileState state) {
-    final active = state.isPremium;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 0),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        decoration: BoxDecoration(
-            gradient: context.nexveero.primaryGradient,
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.workspace_premium, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text(active ? "You're Premium" : 'Go Premium',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Sora')),
-            ]),
-            const SizedBox(height: 6),
-            Text(
-              active
-                  ? 'Premium badge active · boosted placement in View Business.'
-                  : 'Unlock the premium badge and boosted placement with a plan.',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () => context.push(AppRoutes.subscription),
-              child: Container(
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .18),
-                    borderRadius: BorderRadius.circular(11)),
-                child: Text(active ? 'Manage subscription' : 'See plans',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontFamily: 'Sora')),
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final texts = Theme.of(context).textTheme;
+    final primary = Theme.of(context).colorScheme.primary;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final topInset = MediaQuery.of(context).padding.top;
+    final handle = (user.username ?? '').trim().isNotEmpty
+        ? '@${user.username!.trim()}'
+        : null;
+
+    return CustomScrollView(
+      slivers: [
+        // Gradient cover with back + share, and the avatar overlapping it.
+        SliverToBoxAdapter(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                height: topInset + 96,
+                decoration: BoxDecoration(gradient: nex.primaryGradient),
+                padding: EdgeInsets.only(top: topInset),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => context.pop(),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.ios_share, color: Colors.white),
+                      tooltip: 'Share',
+                      onPressed: () => _shareProfile(context, user),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Positioned(
+                left: AppSpacing.xl,
+                top: topInset + 56,
+                child: _SquareAvatar(user: user, background: bg),
+              ),
+            ],
+          ),
         ),
-      ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, 50, AppSpacing.xl, AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Name + verified.
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(user.businessName ?? user.name,
+                          style: texts.titleLarge, overflow: TextOverflow.ellipsis),
+                    ),
+                    if (isVerified) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      Icon(Icons.verified, size: 20, color: primary),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(_roleLine(user),
+                    style: texts.bodyMedium?.copyWith(color: nex.textSecondary)),
+
+                // Business card.
+                if ((user.businessName ?? '').isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  _BusinessCard(user: user, verified: isVerified),
+                ],
+
+                // Bio.
+                if ((user.bio ?? '').isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(user.bio!,
+                      style: texts.bodyMedium?.copyWith(height: 1.5)),
+                ],
+
+                // Posts stat (bound to the API).
+                const SizedBox(height: AppSpacing.lg),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: nex.elevated,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('${user.postsCount}', style: texts.titleMedium),
+                      const SizedBox(height: 2),
+                      Text('Posts',
+                          style: texts.labelSmall
+                              ?.copyWith(color: nex.textSecondary)),
+                    ],
+                  ),
+                ),
+
+                // Chat.
+                const SizedBox(height: AppSpacing.lg),
+                AppButton(
+                  label: 'Chat',
+                  icon: Icons.chat_bubble_outline,
+                  onPressed: () => _startChat(context, user),
+                ),
+
+                if (handle != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(handle,
+                      style: texts.labelSmall
+                          ?.copyWith(color: nex.textSecondary)),
+                ],
+
+                // Posts grid.
+                const SizedBox(height: AppSpacing.xl),
+                Text('POSTS',
+                    style: texts.labelMedium?.copyWith(
+                        color: nex.textSecondary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: AppSpacing.md),
+                _PostsGrid(count: user.postsCount),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _about(BuildContext context, u) {
+  String _roleLine(User user) {
+    if (user.isAdmin) return 'Admin';
+    if (user.isBusiness) return 'Business';
+    if (user.isCreator) return 'Creator';
+    return 'Member';
+  }
+
+  Future<void> _shareProfile(BuildContext context, User user) async {
+    final link = user.shareUrl ??
+        (user.username != null
+            ? 'https://nexveero.com/u/${user.username}'
+            : null);
+    if (link == null) {
+      AppOverlays.snack(context, 'No profile link available yet.');
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(text: '${user.businessName ?? user.name} on Nexveero\n$link'),
+    );
+  }
+
+  /// Opens (or reopens) a 1:1 chat with this business via `POST /chats`.
+  Future<void> _startChat(BuildContext context, User user) async {
+    final repo = sl<ChatRepository>();
+    final result = await AppLoader.run(repo.startChat(user.id));
+    if (!context.mounted) return;
+    switch (result) {
+      case Success(value: final conversation):
+        context.push(AppRoutes.chatThread, extra: conversation);
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
+}
+
+/// Rounded-square gradient/photo avatar (design radius 24) overlapping the cover.
+class _SquareAvatar extends StatelessWidget {
+  const _SquareAvatar({required this.user, required this.background});
+
+  final User user;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
     final nex = context.nexveero;
-    Widget row(IconData i, String? v) => (v == null || v.isEmpty)
-        ? const SizedBox.shrink()
-        : Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(children: [
-              Icon(i, size: 17, color: nex.iconInactive),
-              const SizedBox(width: 10),
-              Expanded(child: Text(v, style: TextStyle(color: nex.textSecondary))),
-            ]),
-          );
+    final imageUrl = MediaUrl.resolve(user.avatarUrl);
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    const size = 82.0;
+    final initials = _initials(user.businessName ?? user.name);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      width: size,
+      height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border.all(color: nex.border),
-          borderRadius: BorderRadius.circular(AppRadius.lg)),
+        gradient: hasImage ? null : nex.primaryGradient,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: background, width: 4),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasImage
+          ? CachedNetworkImage(
+              imageUrl: imageUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorWidget: (_, _, _) => _InitialsText(initials),
+            )
+          : _InitialsText(initials),
+    );
+  }
+}
+
+class _InitialsText extends StatelessWidget {
+  const _InitialsText(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(
+          color: Colors.white, fontWeight: FontWeight.w800, fontSize: 24));
+}
+
+/// Surface card: business name + verified, then a location · type line.
+class _BusinessCard extends StatelessWidget {
+  const _BusinessCard({required this.user, required this.verified});
+
+  final User user;
+  final bool verified;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: nex.border),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          row(Icons.person_outline, u.name),
-          row(Icons.alternate_email, u.email),
-          row(Icons.phone_outlined, u.phone),
-          row(Icons.badge_outlined, (u.gstNumber ?? '').isNotEmpty ? 'GST ${u.gstNumber}' : null),
+          Row(
+            children: [
+              Flexible(
+                child: Text(user.businessName!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (verified) ...[
+                const SizedBox(width: 5),
+                Icon(Icons.verified, size: 16, color: primary),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.place_outlined, size: 15, color: nex.iconInactive),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text('Business account',
+                    style: TextStyle(fontSize: 12.5, color: nex.textSecondary),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+/// The posts grid (design placeholders until the posts feed is bound).
+class _PostsGrid extends StatelessWidget {
+  const _PostsGrid({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    if (count <= 0) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        child: Center(
+          child: Text('No posts yet',
+              style: TextStyle(color: nex.textSecondary)),
+        ),
+      );
+    }
+    final tiles = count > 9 ? 9 : count;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      itemCount: tiles,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: AppSpacing.sm,
+        crossAxisSpacing: AppSpacing.sm,
+      ),
+      itemBuilder: (context, i) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: nex.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+      ),
+    );
+  }
+}
+
+String _initials(String name) {
+  final parts =
+      name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+  if (parts.isEmpty) return '?';
+  return parts.take(2).map((p) => p[0].toUpperCase()).join();
 }

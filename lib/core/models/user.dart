@@ -22,6 +22,9 @@ class User extends Equatable {
     this.referralCode,
     this.roles = const [],
     this.creditBalance = 0,
+    this.postsCount = 0,
+    this.isVerified = false,
+    this.isPremium = false,
     this.lastSeenAt,
   });
 
@@ -53,10 +56,23 @@ class User extends Equatable {
 
   final List<String> roles;
   final int creditBalance;
+
+  /// Number of non-deleted posts (loads) — from `/auth/me` `posts_count`.
+  final int postsCount;
+
+  /// Verified badge (admin-approved) and premium subscription state — from the
+  /// public profile (`is_verified` / `is_premium`).
+  final bool isVerified;
+  final bool isPremium;
   final DateTime? lastSeenAt;
 
   bool get isCreator => roles.contains('creator');
   bool get isAdmin => roles.contains('admin');
+
+  /// A business account (shows the "Business" chip). The public profile omits
+  /// business fields, so this is only known for the current user.
+  bool get isBusiness =>
+      (businessName ?? '').isNotEmpty || roles.contains('business');
 
   bool get isApproved => approvalStatus == 'approved';
   bool get isPending => approvalStatus == 'pending';
@@ -82,6 +98,9 @@ class User extends Equatable {
         referralCode: json.asString('referral_code'),
         roles: json.asStringList('roles'),
         creditBalance: json.asIntOr('credit_balance', 0),
+        postsCount: json.asIntOr('posts_count', 0),
+        isVerified: json.asBool('is_verified'),
+        isPremium: json.asBool('is_premium'),
         lastSeenAt: json.asDate('last_seen_at'),
       );
 
@@ -102,6 +121,9 @@ class User extends Equatable {
         'referral_code': referralCode,
         'roles': roles,
         'credit_balance': creditBalance,
+        'posts_count': postsCount,
+        'is_verified': isVerified,
+        'is_premium': isPremium,
         'last_seen_at': lastSeenAt?.toIso8601String(),
       };
 
@@ -121,6 +143,9 @@ class User extends Equatable {
     String? referralCode,
     List<String>? roles,
     int? creditBalance,
+    int? postsCount,
+    bool? isVerified,
+    bool? isPremium,
     DateTime? lastSeenAt,
   }) {
     return User(
@@ -140,6 +165,9 @@ class User extends Equatable {
       referralCode: referralCode ?? this.referralCode,
       roles: roles ?? this.roles,
       creditBalance: creditBalance ?? this.creditBalance,
+      postsCount: postsCount ?? this.postsCount,
+      isVerified: isVerified ?? this.isVerified,
+      isPremium: isPremium ?? this.isPremium,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     );
   }
@@ -162,6 +190,9 @@ class User extends Equatable {
         referralCode,
         roles,
         creditBalance,
+        postsCount,
+        isVerified,
+        isPremium,
         lastSeenAt,
       ];
 }

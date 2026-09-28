@@ -55,6 +55,12 @@ class PostDetailPage extends StatelessWidget {
         context, result.isSuccess ? 'Report submitted' : 'Could not report');
   }
 
+  /// Opens the post author's profile.
+  void _viewAuthor(BuildContext context) {
+    final id = load.author?.id;
+    if (id != null) context.push(AppRoutes.userProfile, extra: id);
+  }
+
   Future<void> _share(BuildContext context) async {
     final by = load.author?.name;
     // Share the post's canonical link (API share_url).
@@ -214,41 +220,48 @@ class PostDetailPage extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: nex.primaryGradient,
                   ),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    child: AppAvatar(
-                      name: load.author?.name ?? '?',
-                      imageUrl: MediaUrl.resolve(load.author?.avatarUrl),
-                      size: 36,
+                  child: GestureDetector(
+                    onTap: () => _viewAuthor(context),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
+                      child: AppAvatar(
+                        name: load.author?.name ?? '?',
+                        imageUrl: MediaUrl.resolve(load.author?.avatarUrl),
+                        size: 36,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(load.author?.name ?? 'Unknown',
-                                style: texts.titleMedium,
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                          if (load.isBusiness) ...[
-                            const SizedBox(width: 4),
-                            Icon(Icons.verified,
-                                size: 15,
-                                color: Theme.of(context).colorScheme.primary),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _viewAuthor(context),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(load.author?.name ?? 'Unknown',
+                                  style: texts.titleMedium,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            if (load.isBusiness) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.verified,
+                                  size: 15,
+                                  color: Theme.of(context).colorScheme.primary),
+                            ],
                           ],
-                        ],
-                      ),
-                      if (load.postType != null)
-                        Text(load.postType!.name,
-                            style: texts.bodySmall
-                                ?.copyWith(color: nex.textSecondary)),
-                    ],
+                        ),
+                        if (load.postType != null)
+                          Text(load.postType!.name,
+                              style: texts.bodySmall
+                                  ?.copyWith(color: nex.textSecondary)),
+                      ],
+                    ),
                   ),
                 ),
                 InkResponse(

@@ -7,6 +7,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/router/app_routes.dart';
 import '../../domain/entities/business.dart';
 import '../../domain/repositories/business_directory_repository.dart';
 import '../cubit/business_directory_cubit.dart';
@@ -126,7 +129,9 @@ class _BusinessCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final nex = context.nexveero;
     final texts = Theme.of(context).textTheme;
-    return Container(
+    return GestureDetector(
+      onTap: () => context.push(AppRoutes.userProfile, extra: business.id),
+      child: Container(
       margin: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -214,6 +219,7 @@ class _BusinessCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }

@@ -99,6 +99,10 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
       guard(() => _remote.markRead(conversationId));
 
   @override
+  Future<Result<DateTime?>> getPeerLastRead(int id) =>
+      guard(() => _remote.getPeerLastRead(id));
+
+  @override
   Future<Result<UnreadCounts>> getUnreadCounts() =>
       guard(_remote.getUnreadCounts);
 

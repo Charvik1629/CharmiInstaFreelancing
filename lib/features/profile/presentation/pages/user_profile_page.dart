@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/models/user.dart';
@@ -28,7 +30,32 @@ class UserProfilePage extends StatelessWidget {
     return BlocProvider(
       create: (_) => sl<UserProfileCubit>(param1: userId)..load(),
       child: Scaffold(
-        appBar: AppBar(title: Text(initialName ?? 'Profile')),
+        appBar: AppBar(
+          title: Text(initialName ?? 'Profile'),
+          actions: [
+            BlocBuilder<UserProfileCubit, UserProfileState>(
+              builder: (context, state) {
+                final user = state.user;
+                if (user == null) return const SizedBox.shrink();
+                return PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'share':
+                        _shareProfile(context, user);
+                      case 'copy':
+                        _copyLink(context, user);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'share', child: Text('Share profile')),
+                    PopupMenuItem(value: 'copy', child: Text('Copy link')),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
         body: BlocBuilder<UserProfileCubit, UserProfileState>(
           builder: (context, state) {
             switch (state.status) {
@@ -57,7 +84,13 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final texts = Theme.of(context).textTheme;
-    final role = user.isAdmin ? 'Admin' : (user.isCreator ? 'Creator' : 'Member');
+    final nex = context.nexveero;
+    final primary = Theme.of(context).colorScheme.primary;
+    // GET /users/{id} returns only name/username/verified/premium/bio/posts —
+    // no roles/business/offers — so we deliberately show none of those here.
+    final handle = (user.username ?? '').trim().isNotEmpty
+        ? '@${user.username!.trim()}'
+        : null;
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.xl),
       children: [
@@ -68,36 +101,74 @@ class _Body extends StatelessWidget {
                 name: user.name,
                 imageUrl: MediaUrl.resolve(user.avatarUrl),
                 size: 92,
-                ring: user.canPost,
+                ring: user.isVerified,
               ),
               const SizedBox(height: AppSpacing.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Flexible(child: Text(user.name, style: texts.titleLarge)),
-                  if (user.canPost) ...[
+                  if (user.isVerified) ...[
                     const SizedBox(width: AppSpacing.xs),
-                    Icon(Icons.verified,
-                        size: 20, color: Theme.of(context).colorScheme.primary),
+                    Icon(Icons.verified, size: 20, color: primary),
+                  ],
+                  if (user.isPremium) ...[
+                    const SizedBox(width: 2),
+                    Icon(Icons.workspace_premium, size: 20, color: nex.warning),
                   ],
                 ],
               ),
-              const SizedBox(height: 2),
-              Text(role,
-                  style: texts.bodyMedium?.copyWith(color: context.nexveero.textSecondary)),
+              if (handle != null) ...[
+                const SizedBox(height: 2),
+                Text(handle,
+                    style: texts.bodyMedium
+                        ?.copyWith(color: nex.textSecondary)),
+              ],
               if ((user.bio ?? '').isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
                 Text(user.bio!, textAlign: TextAlign.center),
               ],
+              const SizedBox(height: AppSpacing.lg),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: nex.elevated,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+                child: Column(
+                  children: [
+                    Text('${user.postsCount}', style: texts.titleMedium),
+                    const SizedBox(height: 2),
+                    Text('Posts',
+                        style: texts.labelSmall
+                            ?.copyWith(color: nex.textSecondary)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-        // Follow removed — no follow/unfollow API. Message is the only action.
-        AppButton(
-          label: 'Message',
-          icon: Icons.chat_bubble_outline,
-          onPressed: () => _startChat(context, user),
+        // No Follow — the backend has no follow/unfollow API. Chat + Share only.
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Chat',
+                icon: Icons.chat_bubble_outline,
+                onPressed: () => _startChat(context, user),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            AppButton(
+              label: 'Share',
+              icon: Icons.ios_share,
+              variant: AppButtonVariant.outline,
+              expanded: false,
+              onPressed: () => _shareProfile(context, user),
+            ),
+          ],
         ),
       ],
     );
@@ -128,4 +199,30 @@ class _Body extends StatelessWidget {
         AppOverlays.snack(context, f.message);
     }
   }
+}
+
+/// A shareable link to this user's profile (server `share_url`, else derived).
+String? _profileLink(User user) =>
+    user.shareUrl ??
+    (user.username != null ? 'https://nexveero.com/u/${user.username}' : null);
+
+Future<void> _shareProfile(BuildContext context, User user) async {
+  final link = _profileLink(user);
+  if (link == null) {
+    AppOverlays.snack(context, 'No profile link available yet.');
+    return;
+  }
+  await SharePlus.instance.share(
+    ShareParams(text: '${user.name} on Nexveero\n$link'),
+  );
+}
+
+Future<void> _copyLink(BuildContext context, User user) async {
+  final link = _profileLink(user);
+  if (link == null) {
+    AppOverlays.snack(context, 'No profile link available yet.');
+    return;
+  }
+  await Clipboard.setData(ClipboardData(text: link));
+  if (context.mounted) AppOverlays.snack(context, 'Link copied');
 }

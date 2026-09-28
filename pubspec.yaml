@@ -59,7 +59,7 @@ dependencies:
   share_plus: ^13.3.0
   url_launcher: ^6.3.1
   in_app_purchase: ^3.2.0
-  # firebase_core: disabled — needs coordinated Flutter+AGP realignment (see push_service.dart)
+  # firebase_core: disabled — Gradle 8.14 provider wall (:firebase_core compileDebugJavaWithJavac); persists on 3.x AND 4.x. See NOTIFICATION_BACKEND.md.
   # firebase_messaging: disabled
   onesignal_flutter: ^5.3.4
   socket_io_client: ^2.0.3+1

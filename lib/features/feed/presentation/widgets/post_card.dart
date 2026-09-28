@@ -27,6 +27,7 @@ class PostCard extends StatelessWidget {
     this.onShare,
     this.onDirectMessage,
     this.onTap,
+    this.onAuthorTap,
   });
 
   final Load load;
@@ -57,6 +58,9 @@ class PostCard extends StatelessWidget {
   /// Opens the post detail when the card body is tapped.
   final VoidCallback? onTap;
 
+  /// Opens the author's profile when their avatar/name is tapped.
+  final VoidCallback? onAuthorTap;
+
   @override
   Widget build(BuildContext context) {
     final nexveero = context.nexveero;
@@ -73,7 +77,7 @@ class PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
+          _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold, onAuthorTap: onAuthorTap),
           if (load.imageMedia.isNotEmpty)
             _MediaCarousel(items: load.imageMedia)
           else if (load.hasImage)
@@ -119,6 +123,7 @@ class _Header extends StatelessWidget {
     this.onEditDeferred,
     this.onBoost,
     this.onMarkSold,
+    this.onAuthorTap,
   });
   final Load load;
   final VoidCallback onReport;
@@ -128,6 +133,7 @@ class _Header extends StatelessWidget {
   /// Boosts the post (owner). Wired to the real boost API.
   final VoidCallback? onBoost;
   final VoidCallback? onMarkSold;
+  final VoidCallback? onAuthorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -137,33 +143,43 @@ class _Header extends StatelessWidget {
       if (load.createdAt != null) load.createdAt!.timeAgo,
       if (load.postType != null) load.postType!.name,
     ].join(' · ');
+    // Tapping the author (avatar + name) opens their profile — disabled when
+    // there's no author id to route to.
+    final canTapAuthor = onAuthorTap != null && author?.id != null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.sm),
       child: Row(
         children: [
-          AppAvatar(name: author?.name ?? '?', imageUrl: author?.avatarUrl, size: 40),
+          GestureDetector(
+            onTap: canTapAuthor ? onAuthorTap : null,
+            child: AppAvatar(name: author?.name ?? '?', imageUrl: author?.avatarUrl, size: 40),
+          ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(author?.name ?? 'Unknown',
-                          style: Theme.of(context).textTheme.titleMedium,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    if (load.isBusiness) ...[
-                      const SizedBox(width: 4),
-                      Icon(Icons.verified, size: 16, color: Theme.of(context).colorScheme.primary),
+            child: GestureDetector(
+              onTap: canTapAuthor ? onAuthorTap : null,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(author?.name ?? 'Unknown',
+                            style: Theme.of(context).textTheme.titleMedium,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      if (load.isBusiness) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.verified, size: 16, color: Theme.of(context).colorScheme.primary),
+                      ],
                     ],
-                  ],
-                ),
-                if (meta.isNotEmpty)
-                  Text(meta, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: nexveero.textSecondary)),
-              ],
+                  ),
+                  if (meta.isNotEmpty)
+                    Text(meta, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: nexveero.textSecondary)),
+                ],
+              ),
             ),
           ),
           if (load.isBoosted) _BoostedBadge(),

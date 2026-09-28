@@ -24,6 +24,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../groups/domain/repositories/groups_repository.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../domain/entities/chat_message.dart';
@@ -401,6 +402,18 @@ class _ThreadViewState extends State<_ThreadView> {
   void _voiceComingSoon() =>
       AppOverlays.snack(context, 'Voice messages coming soon.');
 
+  /// Fetches the linked post and opens its detail (from a question/offer chat).
+  Future<void> _viewPost(BuildContext context, int loadId) async {
+    final result = await AppLoader.run(sl<FeedRepository>().getLoad(loadId));
+    if (!context.mounted) return;
+    switch (result) {
+      case Success(value: final load):
+        context.push(AppRoutes.postDetail, extra: load);
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
+
   /// Fetches the group by id and opens its Group details screen.
   Future<void> _openGroupInfo(BuildContext context, int groupId) async {
     final result = await AppLoader.run(sl<GroupsRepository>().getGroup(groupId));
@@ -480,6 +493,13 @@ class _ThreadViewState extends State<_ThreadView> {
           ),
         ),
         actions: [
+          // Question/offer chats link to a post — let the user open it.
+          if (c.loadId != null)
+            IconButton(
+              icon: const Icon(Icons.receipt_long_outlined),
+              tooltip: 'View post',
+              onPressed: () => _viewPost(context, c.loadId!),
+            ),
           if (c.type == ConversationType.direct)
             IconButton(
               icon: const Icon(Icons.info_outline),

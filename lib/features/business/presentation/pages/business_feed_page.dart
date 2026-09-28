@@ -268,6 +268,10 @@ class _Body extends StatelessWidget {
                 onShare: () => onShare(load),
                 onReport: () => onReport(load),
                 onMore: () => onMore(load),
+                onAuthorTap: load.author?.id == null
+                    ? null
+                    : () => context.push(AppRoutes.userProfile,
+                        extra: load.author!.id),
               );
             },
           ),

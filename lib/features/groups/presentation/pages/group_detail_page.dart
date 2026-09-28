@@ -152,6 +152,8 @@ class _GroupDetailView extends StatelessWidget {
                         size: 40),
                     title: Text(m.name),
                     trailing: _memberTrailing(context, state, m),
+                    onTap: () => context.push(AppRoutes.userProfile,
+                        extra: m.id),
                   ),
               ],
             ],
