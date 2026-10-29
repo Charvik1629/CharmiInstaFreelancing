@@ -28,11 +28,16 @@ class ChatListState extends Equatable {
     this.labels = const [],
     this.labelFilterId,
     this.errorMessage,
+    this.people = const [],
+    this.query = '',
   });
 
   final ChatListStatus status;
   final List<Conversation> conversations;
   final ChatFilter filter;
+
+  /// Current inbox search text (so the search field can be reset externally).
+  final String query;
 
   /// The user's labels (for the filter row + attach sheet).
   final List<ChatLabel> labels;
@@ -41,6 +46,10 @@ class ChatListState extends Equatable {
   final int? labelFilterId;
 
   final String? errorMessage;
+
+  /// People matching the search term (GET /users?q=) — shown while searching so
+  /// a new chat can be started from the inbox. Empty when not searching.
+  final List<User> people;
 
   ChatListState copyWith({
     ChatListStatus? status,
@@ -51,6 +60,8 @@ class ChatListState extends Equatable {
     bool clearLabelFilter = false,
     String? errorMessage,
     bool clearError = false,
+    List<User>? people,
+    String? query,
   }) {
     return ChatListState(
       status: status ?? this.status,
@@ -60,10 +71,12 @@ class ChatListState extends Equatable {
       labelFilterId:
           clearLabelFilter ? null : (labelFilterId ?? this.labelFilterId),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      people: people ?? this.people,
+      query: query ?? this.query,
     );
   }
 
   @override
   List<Object?> get props =>
-      [status, conversations, filter, labels, labelFilterId, errorMessage];
+      [status, conversations, filter, labels, labelFilterId, errorMessage, people, query];
 }

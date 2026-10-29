@@ -65,7 +65,7 @@ void main() {
     setUp(() => repo = _MockOffersRepo());
 
     test('load populates received offers', () async {
-      when(() => repo.getOffers(tag: OfferTag.received, page: 1))
+      when(() => repo.getOffers(tag: OfferTag.all, page: 1))
           .thenAnswer((_) async => Success(_page([_offer(1), _offer(2)])));
       final cubit = OffersListCubit(repo);
       await cubit.load();
@@ -74,7 +74,7 @@ void main() {
     });
 
     test('setTab switches to sent and reloads', () async {
-      when(() => repo.getOffers(tag: OfferTag.received, page: 1))
+      when(() => repo.getOffers(tag: OfferTag.all, page: 1))
           .thenAnswer((_) async => Success(_page([_offer(1)])));
       when(() => repo.getOffers(tag: OfferTag.sent, page: 1))
           .thenAnswer((_) async => Success(_page([_offer(9, received: false)])));
@@ -86,7 +86,7 @@ void main() {
     });
 
     test('empty result → empty status', () async {
-      when(() => repo.getOffers(tag: OfferTag.received, page: 1))
+      when(() => repo.getOffers(tag: OfferTag.all, page: 1))
           .thenAnswer((_) async => Success(_page([])));
       final cubit = OffersListCubit(repo);
       await cubit.load();
@@ -94,9 +94,9 @@ void main() {
     });
 
     test('loadMore appends the next page', () async {
-      when(() => repo.getOffers(tag: OfferTag.received, page: 1))
+      when(() => repo.getOffers(tag: OfferTag.all, page: 1))
           .thenAnswer((_) async => Success(_page([_offer(1)], more: true)));
-      when(() => repo.getOffers(tag: OfferTag.received, page: 2))
+      when(() => repo.getOffers(tag: OfferTag.all, page: 2))
           .thenAnswer((_) async => Success(_page([_offer(2)])));
       final cubit = OffersListCubit(repo);
       await cubit.load();

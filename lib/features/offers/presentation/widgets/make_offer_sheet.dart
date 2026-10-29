@@ -9,17 +9,39 @@ import '../../domain/entities/offer.dart';
 import '../../domain/repositories/offers_repository.dart';
 import '../cubit/make_offer_cubit.dart';
 
-/// "Make an offer" modal (design: Offer price · Remarks · Submit). Returns the
-/// created [Offer] (with the opened conversation) on success, or null.
+/// Outcome of the "Make an offer" sheet. Either a fresh offer was created, or
+/// the server reported one already exists (409). Both carry the chat thread to
+/// open; [alreadyExisted] tells the caller which case it was.
+class MakeOfferResult {
+  const MakeOfferResult({
+    this.offer,
+    this.conversationId,
+    this.alreadyExisted = false,
+  });
+
+  /// The created offer (null when it already existed).
+  final Offer? offer;
+
+  /// The offer's chat thread id — from the new offer or the existing one.
+  final int? conversationId;
+
+  /// True when the server rejected a duplicate offer (the viewer had already
+  /// offered on this load).
+  final bool alreadyExisted;
+}
+
+/// "Make an offer" modal (design: Offer price · Remarks · Submit). Returns a
+/// [MakeOfferResult] on success or on a duplicate-offer conflict, or null when
+/// dismissed.
 class MakeOfferSheet {
   MakeOfferSheet._();
 
-  static Future<Offer?> show(
+  static Future<MakeOfferResult?> show(
     BuildContext context, {
     required int loadId,
     String? loadTitle,
   }) {
-    return showModalBottomSheet<Offer>(
+    return showModalBottomSheet<MakeOfferResult>(
       context: context,
       isScrollControlled: true,
       builder: (_) => BlocProvider(
@@ -100,7 +122,18 @@ class _MakeOfferFormState extends State<_MakeOfferForm> {
             if (state.status == MakeOfferStatus.success) {
               // Dismiss the keyboard, then close the sheet.
               FocusScope.of(context).unfocus();
-              Navigator.of(context).pop(state.created);
+              Navigator.of(context).pop(MakeOfferResult(
+                offer: state.created,
+                conversationId: state.created?.conversationId,
+              ));
+            } else if (state.status == MakeOfferStatus.alreadyOffered) {
+              // Duplicate offer (409): close and let the caller open the
+              // existing offer chat instead of showing an error.
+              FocusScope.of(context).unfocus();
+              Navigator.of(context).pop(MakeOfferResult(
+                conversationId: state.existingConversationId,
+                alreadyExisted: true,
+              ));
             } else if (state.status == MakeOfferStatus.failure &&
                 state.fieldErrors.isEmpty) {
               AppOverlays.snack(context, state.errorMessage ?? 'Could not send offer');

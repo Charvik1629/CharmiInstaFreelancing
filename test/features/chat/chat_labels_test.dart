@@ -1,5 +1,7 @@
 import 'package:charmi_insta_freelancing/core/error/failure.dart';
 import 'package:charmi_insta_freelancing/core/utils/result.dart';
+import 'package:charmi_insta_freelancing/core/models/user.dart';
+import 'package:charmi_insta_freelancing/features/search/domain/repositories/search_repository.dart';
 import 'package:charmi_insta_freelancing/features/chat/domain/entities/chat_label.dart';
 import 'package:charmi_insta_freelancing/features/chat/domain/entities/conversation.dart';
 import 'package:charmi_insta_freelancing/features/chat/domain/repositories/chat_repository.dart';
@@ -20,6 +22,12 @@ Conversation _conv(int id, {List<ChatLabel> labels = const []}) => Conversation(
       lastMessageAt: DateTime(2026, 8, id),
       labels: labels,
     );
+
+class _FakeSearch implements SearchRepository {
+  @override
+  Future<Result<List<User>>> searchUsers(String query) async =>
+      const Success([]);
+}
 
 void main() {
   setUpAll(() => registerFallbackValue(ConversationType.direct));
@@ -80,23 +88,26 @@ void main() {
       when(repo.getBroadcasts).thenAnswer((_) async => const Success([]));
     });
 
-    test('setLabelFilter filters client-side to that label', () async {
-      final cubit = ChatListCubit(repo);
+    test('setLabelFilter re-fetches and narrows to that label', () async {
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
       expect(cubit.state.conversations.length, 2);
       expect(cubit.state.labels, const [_work]);
 
-      cubit.setLabelFilter(1);
+      await cubit.setLabelFilter(1);
+      expect(cubit.state.labelFilterId, 1);
       expect(cubit.state.conversations.map((c) => c.id), [1]);
 
-      cubit.setLabelFilter(null);
+      // Tapping the active label again clears it.
+      await cubit.setLabelFilter(1);
+      expect(cubit.state.labelFilterId, isNull);
       expect(cubit.state.conversations.length, 2);
     });
 
     test('toggleLabel attaches when the label is absent, then reloads', () async {
       when(() => repo.attachLabel(2, 1))
           .thenAnswer((_) async => const Success(null));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
 
       final ok = await cubit.toggleLabel(_conv(2), _work);
@@ -108,7 +119,7 @@ void main() {
     test('toggleLabel detaches when the label is present', () async {
       when(() => repo.detachLabel(1, 1))
           .thenAnswer((_) async => const Success(null));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
 
       final ok =
@@ -120,7 +131,7 @@ void main() {
     test('toggleLabel surfaces failure', () async {
       when(() => repo.attachLabel(2, 1))
           .thenAnswer((_) async => const Err(ServerFailure('no', statusCode: 500)));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
       final ok = await cubit.toggleLabel(_conv(2), _work);
       expect(ok, isFalse);

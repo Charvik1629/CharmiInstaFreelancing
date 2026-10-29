@@ -8,7 +8,7 @@ import '../entities/unread_counts.dart';
 
 /// Domain contract for chat. Covers direct, group and broadcast threads.
 abstract class ChatRepository {
-  Future<Result<List<Conversation>>> getChats({String? hasMedia, bool hasLinks});
+  Future<Result<List<Conversation>>> getChats({String? hasMedia, bool hasLinks, String? q});
   Future<Result<List<Conversation>>> getBroadcasts();
   Future<Result<List<Conversation>>> getQuestions();
 

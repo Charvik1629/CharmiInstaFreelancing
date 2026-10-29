@@ -21,6 +21,15 @@ class GroupsRepositoryImpl with BaseRepository implements GroupsRepository {
   Future<Result<Group>> getGroup(int id) => guard(() => _remote.getGroup(id));
 
   @override
+  Future<Result<Group>> createGroup({
+    required String name,
+    String? description,
+    List<int> userIds = const [],
+  }) =>
+      guard(() => _remote.createGroup(
+          name: name, description: description, userIds: userIds));
+
+  @override
   Future<Result<List<GroupMember>>> getMembers(int id) =>
       guard(() => _remote.getMembers(id));
 

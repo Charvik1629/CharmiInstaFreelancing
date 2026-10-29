@@ -15,8 +15,9 @@ class FeedRepositoryImpl with BaseRepository implements FeedRepository {
   Future<Result<PaginatedResponse<Load>>> getLoads({
     int page = 1,
     String? postTypeSlug,
+    String? q,
   }) =>
-      guard(() => _remote.getLoads(page: page, postTypeSlug: postTypeSlug));
+      guard(() => _remote.getLoads(page: page, postTypeSlug: postTypeSlug, q: q));
 
   @override
   Future<Result<Load>> createLoad(NewPost post) =>

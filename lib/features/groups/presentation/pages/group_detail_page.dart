@@ -117,7 +117,7 @@ class _GroupDetailView extends StatelessWidget {
                     Text(
                       [
                         if (group.memberCount != null)
-                          '${group.memberCount} members',
+                          '${(group.memberCount! - state.hiddenMemberCount).clamp(0, group.memberCount!)} members',
                         if (group.isPrivate) 'Private',
                       ].join(' · '),
                       style: texts.bodySmall

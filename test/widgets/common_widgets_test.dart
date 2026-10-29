@@ -25,16 +25,19 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('loading shows spinner and blocks taps', (tester) async {
+    testWidgets('loading keeps the label but blocks taps', (tester) async {
       var tapped = 0;
       await tester.pumpWidget(_host(
         AppButton(label: 'X', isLoading: true, onPressed: () => tapped++),
       ));
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      // Label hidden while loading.
-      expect(find.text('X'), findsNothing);
+      // isLoading drives the global AppLoader overlay (not an inline spinner),
+      // keeps the label visible, and disables the button.
+      expect(find.text('X'), findsOneWidget);
       await tester.tap(find.byType(AppButton));
       expect(tapped, 0);
+      // Let the post-frame AppLoader.show()/hide() run so the test tears down
+      // cleanly without a pending timer/overlay.
+      await tester.pump();
     });
   });
 

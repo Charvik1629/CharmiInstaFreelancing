@@ -5,11 +5,16 @@ class AppException implements Exception {
     this.message, {
     this.statusCode,
     this.fieldErrors,
+    this.data,
   });
 
   final String message;
   final int? statusCode;
   final Map<String, List<String>>? fieldErrors;
+
+  /// The response envelope's `data` object, when the error carried one (e.g. a
+  /// 409 conflict returns `data.conversation_id` for the existing thread).
+  final Map<String, dynamic>? data;
 
   @override
   String toString() => 'AppException($statusCode): $message';

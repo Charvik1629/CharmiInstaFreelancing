@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
@@ -45,12 +47,18 @@ class _ChatListView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.label_outline),
             tooltip: 'Manage labels',
-            onPressed: () => context.push(AppRoutes.manageLabels),
+            onPressed: () async {
+              await context.push(AppRoutes.manageLabels);
+              // Reflect labels created/renamed/deleted there in the filter row.
+              if (context.mounted) {
+                context.read<ChatListCubit>().reloadLabels();
+              }
+            },
           ),
           IconButton(
             icon: const Icon(Icons.campaign_outlined),
-            tooltip: 'New broadcast',
-            onPressed: () => context.push(AppRoutes.createBroadcast),
+            tooltip: 'Broadcasts',
+            onPressed: () => context.push(AppRoutes.broadcastsList),
           ),
           IconButton(
             icon: const Icon(Icons.groups_outlined),
@@ -61,11 +69,26 @@ class _ChatListView extends StatelessWidget {
       ),
       body: Column(
         children: [
+          const _ChatSearchBar(),
           const _FilterBar(),
-          const _LabelFilterBar(),
           Expanded(
             child: BlocBuilder<ChatListCubit, ChatListState>(
               builder: (context, state) {
+                // While searching, surface matching people so a new chat can be
+                // started straight from the inbox search.
+                if (state.people.isNotEmpty) {
+                  return ListView(
+                    children: [
+                      const _SectionHeader('People'),
+                      for (final u in state.people) _PeopleRow(user: u),
+                      if (state.conversations.isNotEmpty) ...[
+                        const _SectionHeader('Chats'),
+                        for (final c in state.conversations)
+                          _ConversationTile(conversation: c),
+                      ],
+                    ],
+                  );
+                }
                 switch (state.status) {
                   case ChatListStatus.loading:
                   case ChatListStatus.initial:
@@ -104,14 +127,72 @@ class _ChatListView extends StatelessWidget {
   }
 }
 
+/// Live search field at the top of the chat list — filters the inbox via
+/// GET /chats?q= (peer/group/load title + message bodies), debounced.
+class _ChatSearchBar extends StatefulWidget {
+  const _ChatSearchBar();
+
+  @override
+  State<_ChatSearchBar> createState() => _ChatSearchBarState();
+}
+
+class _ChatSearchBarState extends State<_ChatSearchBar> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return BlocListener<ChatListCubit, ChatListState>(
+      listenWhen: (p, c) => p.query != c.query,
+      listener: (context, state) {
+        // Reflect an external reset (e.g. clearSearch after opening a chat) in
+        // the text field.
+        if (state.query != _controller.text) _controller.text = state.query;
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+        child: TextField(
+          controller: _controller,
+          onChanged: (v) => context.read<ChatListCubit>().setSearch(v),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: 'Search chats',
+            prefixIcon: Icon(Icons.search, size: 20, color: nex.iconInactive),
+            filled: true,
+            fillColor: nex.elevated,
+            contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterBar extends StatelessWidget {
   const _FilterBar();
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ChatListCubit, ChatListState>(
-      buildWhen: (p, c) => p.filter != c.filter,
+      buildWhen: (p, c) =>
+          p.filter != c.filter ||
+          p.labels != c.labels ||
+          p.labelFilterId != c.labelFilterId,
       builder: (context, state) {
+        final cubit = context.read<ChatListCubit>();
+        final labelActive = state.labelFilterId != null;
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(
@@ -121,8 +202,21 @@ class _FilterBar extends StatelessWidget {
               for (final f in ChatFilter.values) ...[
                 AppChip(
                   label: f.label,
-                  selected: f == state.filter,
-                  onTap: () => context.read<ChatListCubit>().setFilter(f),
+                  // A built-in filter is "selected" only when no label filter
+                  // is active (a label chip takes over the view).
+                  selected: !labelActive && f == state.filter,
+                  onTap: () => cubit.setFilter(f),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              // The user's labels become filter chips: tap one to see every
+              // chat carrying it; tap again to clear.
+              for (final l in state.labels) ...[
+                AppChip(
+                  label: l.name,
+                  icon: Icons.label,
+                  selected: state.labelFilterId == l.id,
+                  onTap: () => cubit.setLabelFilter(l.id),
                 ),
                 const SizedBox(width: AppSpacing.sm),
               ],
@@ -134,43 +228,59 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-/// Horizontal row of the user's labels; tapping one filters the inbox to chats
-/// carrying it (client-side). Hidden when the user has no labels.
-class _LabelFilterBar extends StatelessWidget {
-  const _LabelFilterBar();
+/// Small uppercase section label ("People" / "Chats") in search results.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
+        child: Text(title.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: context.nexveero.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                )),
+      );
+}
+
+/// A person from the inbox search — tapping starts (or opens) a direct chat.
+class _PeopleRow extends StatelessWidget {
+  const _PeopleRow({required this.user});
+  final User user;
+
+  Future<void> _open(BuildContext context) async {
+    final cubit = context.read<ChatListCubit>();
+    final result = await AppLoader.run(cubit.startChat(user.id));
+    if (!context.mounted) return;
+    switch (result) {
+      case Success(value: final conv):
+        await context.push(AppRoutes.chatThread, extra: conv);
+        // Back from the chat → reset the inbox to the plain list.
+        if (context.mounted) cubit.clearSearch();
+      case Err(failure: final f):
+        AppOverlays.snack(context, f.message);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ChatListCubit, ChatListState>(
-      buildWhen: (p, c) =>
-          p.labels != c.labels || p.labelFilterId != c.labelFilterId,
-      builder: (context, state) {
-        if (state.labels.isEmpty) return const SizedBox.shrink();
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(
-              left: AppSpacing.lg, right: AppSpacing.lg, bottom: AppSpacing.sm),
-          child: Row(
-            children: [
-              AppChip(
-                label: 'All',
-                selected: state.labelFilterId == null,
-                onTap: () => context.read<ChatListCubit>().setLabelFilter(null),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              for (final l in state.labels) ...[
-                AppChip(
-                  label: l.name,
-                  selected: state.labelFilterId == l.id,
-                  onTap: () =>
-                      context.read<ChatListCubit>().setLabelFilter(l.id),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-              ],
-            ],
-          ),
-        );
-      },
+    final subtitle = user.username != null
+        ? '@${user.username}'
+        : (user.businessName ?? '');
+    return ListTile(
+      leading: AppAvatar(
+          name: user.name,
+          imageUrl: MediaUrl.resolve(user.avatarUrl),
+          size: 44),
+      title: Text(user.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: subtitle.isEmpty
+          ? null
+          : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Icon(Icons.chat_bubble_outline,
+          size: 20, color: context.nexveero.textSecondary),
+      onTap: () => _open(context),
     );
   }
 }
@@ -195,8 +305,11 @@ class _ConversationTile extends StatelessWidget {
             onTap: () => Navigator.of(ctx).pop('pin'),
           ),
           ListTile(
-            leading: const Icon(Icons.label_outline),
-            title: const Text('Manage labels'),
+            leading: Icon(conversation.labels.isEmpty
+                ? Icons.label_outline
+                : Icons.label_off_outlined),
+            title: Text(
+                conversation.labels.isEmpty ? 'Manage labels' : 'Remove label'),
             onTap: () => Navigator.of(ctx).pop('labels'),
           ),
         ],
@@ -209,22 +322,40 @@ class _ConversationTile extends StatelessWidget {
             context, r.failureOrNull?.message ?? 'Could not update pin');
       }
     } else if (action == 'labels' && context.mounted) {
-      await _editLabels(context);
+      if (conversation.labels.isEmpty) {
+        await _editLabels(context);
+      } else {
+        // "Remove label" — clear directly, no picker.
+        final ok = await cubit.clearLabels(conversation);
+        if (context.mounted) {
+          AppOverlays.snack(context, ok ? 'Label removed' : 'Could not remove label');
+        }
+      }
     }
   }
 
   Future<void> _editLabels(BuildContext context) async {
     final cubit = context.read<ChatListCubit>();
+    // Pull the latest labels so any just created on the Manage Labels screen
+    // show up here (the cached list can be stale).
+    await cubit.reloadLabels();
+    if (!context.mounted) return;
     if (cubit.state.labels.isEmpty) {
       AppOverlays.snack(context, 'Create a label first (label icon, top right).');
       return;
     }
+    // Use the freshest copy of this conversation (its attached labels may have
+    // changed) so the sheet's checkboxes start correct.
+    final current = cubit.state.conversations.firstWhere(
+      (c) => c.id == conversation.id && c.type == conversation.type,
+      orElse: () => conversation,
+    );
     await AppOverlays.sheet<void>(
       context,
       builder: (_) => _LabelPickerSheet(
-        conversation: conversation,
+        conversation: current,
         labels: cubit.state.labels,
-        onToggle: (label) => cubit.toggleLabel(conversation, label),
+        onToggle: (label) => cubit.toggleLabel(current, label),
       ),
     );
   }
@@ -297,9 +428,15 @@ class _ConversationTile extends StatelessWidget {
       onTap: () async {
         final cubit = context.read<ChatListCubit>();
         await context.push(AppRoutes.chatThread, extra: c);
-        // Returning from a thread: the messages were marked read, so refresh
-        // the inbox to clear this row's unread badge.
-        await cubit.refresh();
+        if (!context.mounted) return;
+        // Back from a thread: if we were searching, reset the inbox to the
+        // plain list (search text + people cleared); otherwise just refresh so
+        // this row's unread badge clears (messages were marked read).
+        if (cubit.state.query.isNotEmpty || cubit.state.people.isNotEmpty) {
+          cubit.clearSearch();
+        } else {
+          await cubit.refresh();
+        }
       },
     );
   }
@@ -324,7 +461,11 @@ class _Leading extends StatelessWidget {
       height: 48,
       child: Stack(
         children: [
-          AppAvatar(name: c.title, imageUrl: MediaUrl.resolve(c.avatarUrl), size: 48),
+          AppAvatar(
+              name: c.title,
+              imageUrl: MediaUrl.resolve(c.avatarUrl),
+              size: 48,
+              enlargeOnTap: true),
           if (badge != null)
             Positioned(
               right: 0,
@@ -404,19 +545,17 @@ class _LabelPickerSheetState extends State<_LabelPickerSheet> {
                     onChanged: _busyId != null
                         ? null
                         : (_) async {
+                            // Capture before the async gap to satisfy the
+                            // use_build_context_synchronously lint.
+                            final nav = Navigator.of(context);
                             setState(() => _busyId = l.id);
                             final ok = await widget.onToggle(l);
                             if (!mounted) return;
-                            setState(() {
-                              if (ok) {
-                                if (_attached.contains(l.id)) {
-                                  _attached.remove(l.id);
-                                } else {
-                                  _attached.add(l.id);
-                                }
-                              }
-                              _busyId = null;
-                            });
+                            if (ok) {
+                              nav.pop(); // label applied/removed → close sheet
+                              return;
+                            }
+                            setState(() => _busyId = null);
                           },
                   ),
               ],

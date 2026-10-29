@@ -1,6 +1,6 @@
 part of 'make_offer_cubit.dart';
 
-enum MakeOfferStatus { idle, submitting, success, failure }
+enum MakeOfferStatus { idle, submitting, success, failure, alreadyOffered }
 
 class MakeOfferState extends Equatable {
   const MakeOfferState({
@@ -10,6 +10,7 @@ class MakeOfferState extends Equatable {
     this.errorMessage,
     this.fieldErrors = const {},
     this.created,
+    this.existingConversationId,
   });
 
   final String priceText;
@@ -18,6 +19,10 @@ class MakeOfferState extends Equatable {
   final String? errorMessage;
   final Map<String, String> fieldErrors;
   final Offer? created;
+
+  /// Set when the server rejects a duplicate offer (409) and hands back the
+  /// existing offer's chat thread id, so the sheet can route there.
+  final int? existingConversationId;
 
   bool get isSubmitting => status == MakeOfferStatus.submitting;
 
@@ -33,6 +38,7 @@ class MakeOfferState extends Equatable {
     bool clearError = false,
     Map<String, String>? fieldErrors,
     Offer? created,
+    int? existingConversationId,
   }) {
     return MakeOfferState(
       priceText: priceText ?? this.priceText,
@@ -41,10 +47,19 @@ class MakeOfferState extends Equatable {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       fieldErrors: clearError ? const {} : (fieldErrors ?? this.fieldErrors),
       created: created ?? this.created,
+      existingConversationId:
+          existingConversationId ?? this.existingConversationId,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [priceText, remarks, status, errorMessage, fieldErrors, created];
+  List<Object?> get props => [
+        priceText,
+        remarks,
+        status,
+        errorMessage,
+        fieldErrors,
+        created,
+        existingConversationId,
+      ];
 }

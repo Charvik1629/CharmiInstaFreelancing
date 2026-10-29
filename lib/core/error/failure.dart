@@ -58,6 +58,20 @@ class NotFoundFailure extends Failure {
       : super(statusCode: 404);
 }
 
+/// 409 — the request conflicts with existing state (e.g. a second offer on a
+/// load the viewer already offered on). [conversationId] points at the existing
+/// resource's chat thread when the server returns `data.conversation_id`, so
+/// callers can route there instead of surfacing an error.
+class ConflictFailure extends Failure {
+  const ConflictFailure(super.message, {this.conversationId})
+      : super(statusCode: 409);
+
+  final int? conversationId;
+
+  @override
+  List<Object?> get props => [message, statusCode, fieldErrors, conversationId];
+}
+
 /// Response body could not be parsed into the expected model.
 class ParsingFailure extends Failure {
   const ParsingFailure([super.message = 'Unexpected response from server.']);

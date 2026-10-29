@@ -173,8 +173,11 @@ class _BusinessDetailsViewState extends State<_BusinessDetailsView> {
           return Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xxl),
+              // Add the bottom safe-area inset so the Save button never sits
+              // under the system navigation bar when scrolled to the end.
+              padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.xxl + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 Text(
                   'Complete your profile so buyers can find and trust you. '

@@ -39,6 +39,12 @@ class MakeOfferCubit extends Cubit<MakeOfferState> {
     switch (result) {
       case Success(value: final offer):
         emit(state.copyWith(status: MakeOfferStatus.success, created: offer));
+      case Err(failure: ConflictFailure(:final conversationId)):
+        // Already offered: don't error — route into the existing offer chat.
+        emit(state.copyWith(
+          status: MakeOfferStatus.alreadyOffered,
+          existingConversationId: conversationId,
+        ));
       case Err(failure: final f):
         emit(state.copyWith(
           status: MakeOfferStatus.failure,

@@ -24,6 +24,18 @@ class GroupsListPage extends StatelessWidget {
       create: (_) => sl<GroupsListCubit>()..load(isManager: isManager),
       child: Scaffold(
         appBar: AppBar(title: const Text('Groups')),
+        floatingActionButton: Builder(
+          builder: (context) => FloatingActionButton.extended(
+            onPressed: () async {
+              final created = await context.push(AppRoutes.createGroup);
+              if (created != null && context.mounted) {
+                context.read<GroupsListCubit>().refresh(isManager: isManager);
+              }
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('New group'),
+          ),
+        ),
         body: BlocBuilder<GroupsListCubit, GroupsListState>(
           builder: (context, state) {
             switch (state.status) {

@@ -52,6 +52,33 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- FCM: the backend sends notifications with
+                 click_action = FLUTTER_NOTIFICATION_CLICK. Android opens the
+                 activity whose intent-filter declares that action when the user
+                 taps the notification; without this filter the tap matches no
+                 activity and the app never opens. firebase_messaging then
+                 delivers the payload via getInitialMessage / onMessageOpenedApp
+                 so we can deep-link to the right screen. -->
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+            <!-- Shared post links open inside the app (go_router handles /p/{id}).
+                 For a tapped https link to auto-open the app WITHOUT the system
+                 "open with" chooser, the backend must serve
+                 https://nexveero.com/.well-known/assetlinks.json listing this
+                 app's package + the RELEASE signing cert SHA-256 fingerprint
+                 (android:autoVerify). Until then the app still appears in the
+                 chooser and `adb am start -d` opens it directly. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="nexveero.com"
+                      android:pathPrefix="/p/"/>
+                <data android:scheme="http" android:host="nexveero.com"
+                      android:pathPrefix="/p/"/>
+            </intent-filter>
         </activity>
         <!-- Google Mobile Ads app id. This is Google's official SAMPLE/TEST app
              id; replace with the real AdMob app id for release (Module 6). The
@@ -59,6 +86,11 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713"/>
+        <!-- FCM: default channel for background/killed notifications so they
+             match the app's "nexveero_default" channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="nexveero_default" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

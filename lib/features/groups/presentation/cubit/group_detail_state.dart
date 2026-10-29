@@ -7,6 +7,7 @@ class GroupDetailState extends Equatable {
     this.status = DetailStatus.initial,
     this.group,
     this.members = const [],
+    this.hiddenMemberCount = 0,
     this.joinRequests = const [],
     this.isManager = false,
     this.actingOnId,
@@ -16,6 +17,10 @@ class GroupDetailState extends Equatable {
   final DetailStatus status;
   final Group? group;
   final List<GroupMember> members;
+
+  /// Members filtered out of [members] (hidden system admins). Used to adjust
+  /// the server-provided header count so it matches the visible list.
+  final int hiddenMemberCount;
   final List<GroupJoinRequest> joinRequests;
 
   /// Whether the viewer can manage the group (admin role).
@@ -29,6 +34,7 @@ class GroupDetailState extends Equatable {
     DetailStatus? status,
     Group? group,
     List<GroupMember>? members,
+    int? hiddenMemberCount,
     List<GroupJoinRequest>? joinRequests,
     bool? isManager,
     int? actingOnId,
@@ -39,6 +45,7 @@ class GroupDetailState extends Equatable {
       status: status ?? this.status,
       group: group ?? this.group,
       members: members ?? this.members,
+      hiddenMemberCount: hiddenMemberCount ?? this.hiddenMemberCount,
       joinRequests: joinRequests ?? this.joinRequests,
       isManager: isManager ?? this.isManager,
       actingOnId: clearActingOn ? null : (actingOnId ?? this.actingOnId),
@@ -51,6 +58,7 @@ class GroupDetailState extends Equatable {
         status,
         group,
         members,
+        hiddenMemberCount,
         joinRequests,
         isManager,
         actingOnId,

@@ -1,5 +1,7 @@
 import 'package:charmi_insta_freelancing/core/error/failure.dart';
 import 'package:charmi_insta_freelancing/core/utils/result.dart';
+import 'package:charmi_insta_freelancing/core/models/user.dart';
+import 'package:charmi_insta_freelancing/features/search/domain/repositories/search_repository.dart';
 import 'package:charmi_insta_freelancing/features/chat/data/datasources/chat_remote_data_source.dart';
 import 'package:charmi_insta_freelancing/features/chat/domain/entities/chat_message.dart';
 import 'package:charmi_insta_freelancing/features/chat/domain/entities/conversation.dart';
@@ -16,6 +18,12 @@ Conversation _conv(int id, ConversationType type, {DateTime? at, int unread = 0}
 
 ChatMessage _msg(int id, {int? sender}) =>
     ChatMessage(id: id, body: 'm$id', senderId: sender);
+
+class _FakeSearch implements SearchRepository {
+  @override
+  Future<Result<List<User>>> searchUsers(String query) async =>
+      const Success([]);
+}
 
 void main() {
   setUpAll(() => registerFallbackValue(ConversationType.direct));
@@ -129,7 +137,7 @@ void main() {
       when(() => repo.getBroadcasts()).thenAnswer(
           (_) async => Success([_conv(3, ConversationType.broadcast, at: t2)]));
 
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
 
       expect(cubit.state.status, ChatListStatus.loaded);
@@ -141,7 +149,7 @@ void main() {
             _conv(1, ConversationType.direct),
             _conv(2, ConversationType.group),
           ]));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.setFilter(ChatFilter.direct);
       expect(cubit.state.conversations.map((c) => c.id), [1]);
     });
@@ -149,7 +157,7 @@ void main() {
     test('broadcasts filter uses the broadcasts endpoint', () async {
       when(() => repo.getBroadcasts()).thenAnswer(
           (_) async => Success([_conv(9, ConversationType.broadcast)]));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.setFilter(ChatFilter.broadcasts);
       expect(cubit.state.conversations.single.id, 9);
       verifyNever(() => repo.getChats());
@@ -158,7 +166,7 @@ void main() {
     test('questions filter loads the Q&A inbox only', () async {
       when(() => repo.getQuestions()).thenAnswer(
           (_) async => Success([_conv(9, ConversationType.direct)]));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.setFilter(ChatFilter.questions);
       expect(cubit.state.conversations.single.id, 9);
       verifyNever(() => repo.getChats());
@@ -168,7 +176,7 @@ void main() {
     test('empty result → empty status', () async {
       when(() => repo.getChats()).thenAnswer((_) async => const Success([]));
       when(() => repo.getBroadcasts()).thenAnswer((_) async => const Success([]));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
       expect(cubit.state.status, ChatListStatus.empty);
     });
@@ -180,7 +188,7 @@ void main() {
           .thenAnswer((_) async => const Err(NetworkFailure()));
       when(() => repo.getBroadcasts())
           .thenAnswer((_) async => const Err(NetworkFailure()));
-      final cubit = ChatListCubit(repo);
+      final cubit = ChatListCubit(repo, _FakeSearch());
       await cubit.load();
       expect(cubit.state.status, ChatListStatus.error);
     });
@@ -191,7 +199,15 @@ void main() {
     final direct = _conv(12, ConversationType.direct);
     final broadcast = _conv(1, ConversationType.broadcast);
 
-    setUp(() => repo = _MockChatRepo());
+    setUp(() {
+      repo = _MockChatRepo();
+      // load() fires these as background enrichment; default them so the
+      // Mockito mock doesn't throw MissingStubError before the assertions.
+      when(() => repo.getPeerLastRead(any()))
+          .thenAnswer((_) async => const Success(null));
+      when(() => repo.getBroadcastQuota(any()))
+          .thenAnswer((_) async => const Success(null));
+    });
 
     test('load fills messages and marks a direct thread read', () async {
       when(() => repo.getMessages(id: 12, type: ConversationType.direct, beforeId: null))

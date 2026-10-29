@@ -7,6 +7,7 @@ abstract class FeedRepository {
   Future<Result<PaginatedResponse<Load>>> getLoads({
     int page = 1,
     String? postTypeSlug,
+    String? q,
   });
 
   /// Creates a post; on success returns the created [Load].

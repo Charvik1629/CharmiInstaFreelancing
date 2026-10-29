@@ -14,6 +14,10 @@ class AppRoutes {
   static const String search = '/search';
   static const String createPost = '/create-post';
   static const String postDetail = '/post';
+
+  /// Inbound post deep link (shared web App Link `https://nexveero.com/p/{id}`).
+  /// Opens the post inside the app instead of the browser.
+  static const String postLink = '/p';
   static const String editProfile = '/edit-profile';
   static const String businessDetails = '/business-details';
   static const String businessProfile = '/business-profile';
@@ -41,12 +45,14 @@ class AppRoutes {
   static const String adminPackages = '/admin/packages';
   static const String adminPricing = '/admin/pricing';
   static const String groups = '/groups';
+  static const String createGroup = '/groups/new';
   static const String groupDetail = '/group';
   static const String security = '/security';
   static const String contactSync = '/find-friends';
   static const String userProfile = '/user';
   static const String createBroadcast = '/broadcast/new';
   static const String broadcastDetail = '/broadcast';
+  static const String broadcastsList = '/broadcasts';
   static const String orders = '/orders';
   static const String createOrder = '/orders/new';
   static const String orderDetail = '/order';

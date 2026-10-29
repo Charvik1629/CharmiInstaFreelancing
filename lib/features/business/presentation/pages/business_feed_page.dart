@@ -161,6 +161,11 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
         title: const _GradientWordmark('Business'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.store_mall_directory_outlined),
+            tooltip: 'Business directory',
+            onPressed: () => context.push(AppRoutes.businessDirectory),
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none),
             tooltip: 'Notifications',
             onPressed: () => context.push(AppRoutes.notifications),
@@ -174,7 +179,7 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
       ),
       body: Column(
         children: [
-          _SearchBar(onTap: () => context.push(AppRoutes.businessDirectory)),
+          const _SearchBar(),
           Expanded(
             child: BlocBuilder<FeedCubit, FeedState>(
               builder: (context, state) => _Body(
@@ -280,9 +285,23 @@ class _Body extends StatelessWidget {
   }
 }
 
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.onTap});
-  final VoidCallback onTap;
+/// Inline business-feed search: typing filters the business posts server-side
+/// (FeedCubit `q`) without leaving the tab — same as the Home feed search.
+class _SearchBar extends StatefulWidget {
+  const _SearchBar();
+
+  @override
+  State<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends State<_SearchBar> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -290,24 +309,45 @@ class _SearchBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          decoration: BoxDecoration(
-            color: nex.elevated,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.search, size: 20, color: nex.iconInactive),
-              const SizedBox(width: AppSpacing.sm),
-              Text('Search products, tags, business…',
-                  style: TextStyle(color: nex.textSecondary)),
-            ],
-          ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: nex.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 20, color: nex.iconInactive),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                textInputAction: TextInputAction.search,
+                onChanged: (q) {
+                  context.read<FeedCubit>().setSearch(q);
+                  setState(() {}); // toggle the clear (×) button
+                },
+                decoration: const InputDecoration(
+                  isDense: true,
+                  filled: false,
+                  hintText: 'Search products, tags, business…',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            if (_controller.text.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _controller.clear();
+                  context.read<FeedCubit>().setSearch('');
+                  setState(() {});
+                },
+                child: Icon(Icons.close, size: 18, color: nex.iconInactive),
+              ),
+          ],
         ),
       ),
     );

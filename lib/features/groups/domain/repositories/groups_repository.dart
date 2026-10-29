@@ -8,6 +8,13 @@ abstract class GroupsRepository {
   Future<Result<Group>> getGroup(int id);
   Future<Result<List<GroupMember>>> getMembers(int id);
 
+  /// Creates a group ([name] required; optional initial members).
+  Future<Result<Group>> createGroup({
+    required String name,
+    String? description,
+    List<int> userIds,
+  });
+
   /// Request to join a (private) group.
   Future<Result<void>> requestJoin(int id);
   Future<Result<void>> cancelJoinRequest(int id);

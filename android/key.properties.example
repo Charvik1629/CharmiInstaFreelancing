@@ -1,0 +1,17 @@
+# Release signing config for Nexveero (Android).
+#
+# 1. Generate your upload keystore ONCE (keep the .jks + passwords safe and
+#    private — losing them means you can't update the app on Play Store):
+#
+#      keytool -genkey -v -keystore ~/nexveero-upload.jks \
+#        -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# 2. Copy this file to `android/key.properties` and fill in your real values.
+#    `android/key.properties` is gitignored and must never be committed.
+#
+# storeFile may be an absolute path or relative to the `android/app` folder.
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=/absolute/path/to/nexveero-upload.jks

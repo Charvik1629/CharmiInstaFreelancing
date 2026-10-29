@@ -14,6 +14,7 @@ abstract class FeedRemoteDataSource {
     int page = 1,
     int perPage = AppConstants.defaultPageSize,
     String? postTypeSlug, // buy | sell | business ; null = all
+    String? q, // free-text search (server-side filter)
   });
 
   /// Creates a new load (post). Sends multipart/form-data when an image is
@@ -56,6 +57,7 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
     int page = 1,
     int perPage = AppConstants.defaultPageSize,
     String? postTypeSlug,
+    String? q,
   }) async {
     final res = await _client.get<Map<String, dynamic>>(
       ApiEndpoints.loads,
@@ -63,6 +65,7 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
         'page': page,
         'per_page': perPage,
         'post_type': ?postTypeSlug,
+        'q': ?(q != null && q.isNotEmpty ? q : null),
       },
     );
     return ApiEnvelope.list(res.data, Load.fromJson);

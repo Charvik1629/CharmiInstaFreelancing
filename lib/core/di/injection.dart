@@ -71,17 +71,20 @@ import '../../features/tags/presentation/cubit/admin_tags_cubit.dart';
 import '../../features/groups/data/datasources/groups_remote_data_source.dart';
 import '../../features/groups/data/repositories/groups_repository_impl.dart';
 import '../../features/groups/domain/repositories/groups_repository.dart';
+import '../../features/groups/presentation/cubit/create_group_cubit.dart';
 import '../../features/groups/presentation/cubit/group_detail_cubit.dart';
 import '../../features/groups/presentation/cubit/groups_list_cubit.dart';
 import '../../features/security/data/security_remote_data_source.dart';
 import '../../features/security/domain/security_repository.dart';
 import '../../features/security/presentation/cubit/security_cubit.dart';
 import '../../features/contacts/data/contacts_data_source.dart';
+import '../../features/contacts/data/contacts_remote_data_source.dart';
 import '../../features/contacts/domain/contacts_repository.dart';
 import '../../features/contacts/presentation/cubit/contact_sync_cubit.dart';
 import '../../features/broadcasts/data/broadcasts_remote_data_source.dart';
 import '../../features/broadcasts/domain/broadcasts_repository.dart';
 import '../../features/broadcasts/presentation/cubit/create_broadcast_cubit.dart';
+import '../../features/admin/presentation/cubit/broadcast_groups_cubit.dart';
 import '../../features/profile/data/datasources/profile_remote_data_source.dart';
 import '../../features/profile/data/repositories/profile_repository_impl.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
@@ -174,13 +177,15 @@ void registerFeatureDependencies() {
     () => ProfileRepositoryImpl(sl<ProfileRemoteDataSource>()),
   );
   sl.registerFactoryParam<UserProfileCubit, int, void>(
-    (userId, _) => UserProfileCubit(sl<ProfileRepository>(), userId),
+    (userId, _) =>
+        UserProfileCubit(sl<ProfileRepository>(), sl<FeedRepository>(), userId),
   );
   sl.registerFactory<BusinessDetailsCubit>(
     () => BusinessDetailsCubit(sl<ProfileRepository>()),
   );
   sl.registerFactory<BusinessProfileCubit>(
-    () => BusinessProfileCubit(sl<ProfileRepository>(), sl<SubscriptionRepository>()),
+    () => BusinessProfileCubit(sl<ProfileRepository>(),
+        sl<SubscriptionRepository>(), sl<FeedRepository>()),
   );
 
   // Business directory (/businesses).
@@ -221,7 +226,8 @@ void registerFeatureDependencies() {
   sl.registerLazySingleton<ChatRepository>(
     () => ChatRepositoryImpl(sl<ChatRemoteDataSource>()),
   );
-  sl.registerFactory<ChatListCubit>(() => ChatListCubit(sl<ChatRepository>()));
+  sl.registerFactory<ChatListCubit>(
+      () => ChatListCubit(sl<ChatRepository>(), sl<SearchRepository>()));
   sl.registerFactory<ChatLabelsCubit>(
       () => ChatLabelsCubit(sl<ChatRepository>()));
   sl.registerLazySingleton<UnreadCubit>(
@@ -329,6 +335,8 @@ void registerFeatureDependencies() {
     () => GroupsRepositoryImpl(sl<GroupsRemoteDataSource>()),
   );
   sl.registerFactory<GroupsListCubit>(() => GroupsListCubit(sl<GroupsRepository>()));
+  sl.registerFactory<CreateGroupCubit>(
+      () => CreateGroupCubit(sl<GroupsRepository>(), sl<SearchRepository>()));
   sl.registerFactoryParam<GroupDetailCubit, int, void>(
     (groupId, _) => GroupDetailCubit(sl<GroupsRepository>(), groupId),
   );
@@ -344,8 +352,11 @@ void registerFeatureDependencies() {
 
   // Contact sync (Module 8).
   sl.registerLazySingleton<ContactsDataSource>(() => const ContactsDataSourceImpl());
+  sl.registerLazySingleton<ContactsRemoteDataSource>(
+      () => ContactsRemoteDataSourceImpl(sl<ApiClient>()));
   sl.registerLazySingleton<ContactsRepository>(
-    () => ContactsRepositoryImpl(sl<ContactsDataSource>()),
+    () => ContactsRepositoryImpl(
+        sl<ContactsDataSource>(), sl<ContactsRemoteDataSource>()),
   );
   sl.registerFactory<ContactSyncCubit>(
     () => ContactSyncCubit(sl<ContactsRepository>()),
@@ -360,5 +371,8 @@ void registerFeatureDependencies() {
   );
   sl.registerFactory<CreateBroadcastCubit>(
     () => CreateBroadcastCubit(sl<BroadcastsRepository>(), sl<SearchRepository>()),
+  );
+  sl.registerFactory<BroadcastGroupsCubit>(
+    () => BroadcastGroupsCubit(sl<BroadcastsRepository>()),
   );
 }

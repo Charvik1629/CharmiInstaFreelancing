@@ -31,6 +31,7 @@ class ConversationCubit extends Cubit<ConversationState> {
   StreamSubscription<TypingEvent>? _typingSub;
   StreamSubscription<ReadEvent>? _readSub;
   StreamSubscription<PresenceEvent>? _presenceSub;
+  StreamSubscription<void>? _connectedSub;
   Timer? _typingClear;
   Timer? _presenceTimer;
 
@@ -70,6 +71,13 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (!sl.isRegistered<SocketService>()) return;
     final socket = sl<SocketService>();
     socket.joinConversation(conversation.id);
+    // On (re)connect after a background drop, re-join the room and refetch the
+    // latest messages — events missed while disconnected aren't replayed, so
+    // this catches up new messages without a manual pull-to-refresh.
+    _connectedSub = socket.connected.listen((_) {
+      socket.joinConversation(conversation.id);
+      _catchUp();
+    });
     _socketSub = socket.messages
         .where((m) => m.conversationId == conversation.id)
         .listen((m) {
@@ -112,13 +120,41 @@ class ConversationCubit extends Cubit<ConversationState> {
     final peerId = conversation.peerId;
     if (peerId != null && conversation.type == ConversationType.direct) {
       _pollPresence(peerId);
-      _presenceTimer = Timer.periodic(
-          const Duration(seconds: 20), (_) => _pollPresence(peerId));
+      // The backend doesn't push `message:read`, so besides presence we also
+      // re-read the peer's read cursor here — that's what turns my ✓ into ✓✓
+      // once the peer opens the thread (without me having to reload).
+      _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+        _pollPresence(peerId);
+        _seedPeerRead();
+      });
       // Also honour a push presence:update if the backend ever adds one.
       _presenceSub = socket.presenceEvents
           .where((p) => p.userId == peerId)
           .listen((p) => emit(state.copyWith(
               peerOnline: p.isOnline, peerLastSeen: p.lastSeenAt)));
+    }
+  }
+
+  /// Refetches the latest message window and appends any messages not already
+  /// in the thread (used after a reconnect to catch up ones missed while the
+  /// socket was down). Doesn't show a spinner or disturb older-page scroll.
+  Future<void> _catchUp() async {
+    if (state.status == ThreadStatus.loading || isClosed) return;
+    final result = await _repository.getMessages(
+      id: conversation.id,
+      type: conversation.type,
+    );
+    if (result case Success(value: final page) when !isClosed) {
+      final existing = state.messages.map((m) => m.id).toSet();
+      final newer =
+          page.items.where((m) => m.id > 0 && !existing.contains(m.id)).toList();
+      if (newer.isNotEmpty) {
+        emit(state.copyWith(
+          messages: [...state.messages, ...newer],
+          status: ThreadStatus.loaded,
+        ));
+        _markRead();
+      }
     }
   }
 
@@ -196,6 +232,7 @@ class ConversationCubit extends Cubit<ConversationState> {
   @override
   Future<void> close() {
     _socketSub?.cancel();
+    _connectedSub?.cancel();
     _typingSub?.cancel();
     _readSub?.cancel();
     _presenceSub?.cancel();

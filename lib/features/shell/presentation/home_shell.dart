@@ -25,12 +25,14 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
+  // Nav order: Chats · Home · Business · Search · Profile. App opens on Home.
+  int _index = 1;
   final UnreadCubit _unread = sl<UnreadCubit>();
 
-  // Chats now sits in slot 4 (Home · Search · Business · Chats · Profile).
-  static const _chatIndex = 3;
+  static const _chatIndex = 0;
+  static const _homeIndex = 1;
+  static const _businessIndex = 2;
 
   // Bumped when the user taps an already-active tab; the feed listens and
   // refreshes + scrolls to top (design: tapping Home/Business again reloads).
@@ -42,10 +44,23 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _unread.refresh();
     // Live toast for in-app notifications (e.g. someone asked a question).
     if (sl.isRegistered<SocketService>()) {
       _notifSub = sl<SocketService>().notifications.listen(_onNotification);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On returning to the foreground, reconnect/poke the socket so lists and
+    // open threads refetch and catch up anything missed while backgrounded
+    // (new chats, messages, posts) — no manual pull-to-refresh needed. Also
+    // refresh the unread badge.
+    if (state == AppLifecycleState.resumed) {
+      if (sl.isRegistered<SocketService>()) sl<SocketService>().onAppResumed();
+      _unread.refresh();
     }
   }
 
@@ -57,6 +72,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notifSub?.cancel();
     _homeReselect.dispose();
     _businessReselect.dispose();
@@ -64,23 +80,27 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   late final _pages = [
-    FeedPage(reselect: _homeReselect),
-    const SearchPage(),
-    BusinessFeedPage(reselect: _businessReselect),
     const ChatListPage(),
+    FeedPage(reselect: _homeReselect),
+    BusinessFeedPage(reselect: _businessReselect),
+    const SearchPage(),
     const ProfilePage(),
   ];
 
   void _onTap(int i) {
     // Re-tapping the current tab reloads it instead of doing nothing.
     if (i == _index) {
-      if (i == 0) _homeReselect.value++;
-      if (i == 2) _businessReselect.value++;
+      if (i == _homeIndex) _homeReselect.value++;
+      if (i == _businessIndex) _businessReselect.value++;
       return;
     }
     setState(() => _index = i);
     // Opening the inbox clears its badge locally; the list shows per-row unread.
     if (i == _chatIndex) _unread.clearInbox();
+    // The Business feed must fetch fresh data every time it's opened (not only
+    // when re-tapped), so a post created elsewhere shows up without an app
+    // restart. The feed listens to this notifier and refreshes.
+    if (i == _businessIndex) _businessReselect.value++;
   }
 
   @override
@@ -91,15 +111,15 @@ class _HomeShellState extends State<HomeShell> {
         bloc: _unread,
         builder: (context, counts) {
           final items = [
-            const AppNavItem(icon: Icons.home_outlined, label: 'Home'),
-            const AppNavItem(icon: Icons.search, label: 'Search'),
-            const AppNavItem(
-                icon: Icons.storefront_outlined, label: 'Business'),
             AppNavItem(
               icon: Icons.chat_bubble_outline,
               label: 'Chats',
               badge: counts.inbox > 0,
             ),
+            const AppNavItem(icon: Icons.home_outlined, label: 'Home'),
+            const AppNavItem(
+                icon: Icons.storefront_outlined, label: 'Business'),
+            const AppNavItem(icon: Icons.search, label: 'Search'),
             const AppNavItem(icon: Icons.person_outline, label: 'Profile'),
           ];
           return AppBottomNav(

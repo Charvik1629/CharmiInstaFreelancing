@@ -23,6 +23,7 @@ class PostCard extends StatelessWidget {
     this.onBoost,
     this.onMarkSold,
     this.onOffer,
+    this.onViewOffer,
     this.onAsk,
     this.onShare,
     this.onDirectMessage,
@@ -44,6 +45,10 @@ class PostCard extends StatelessWidget {
 
   /// Shown as a "Make offer" action when the load allows it (can_make_offer).
   final VoidCallback? onOffer;
+
+  /// Opens the viewer's existing offer chat — shown as "View offer" once the
+  /// viewer has already offered (viewer_has_offer / offer_conversation_id).
+  final VoidCallback? onViewOffer;
 
   /// Ask a question about the post (can_ask_question).
   final VoidCallback? onAsk;
@@ -78,10 +83,22 @@ class PostCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold, onAuthorTap: onAuthorTap),
-          if (load.imageMedia.isNotEmpty)
-            _MediaCarousel(items: load.imageMedia)
-          else if (load.hasImage)
-            _Media(url: load.mediaUrl!)
+          // Media with a Buy/Sell type badge in the corner.
+          if (load.imageMedia.isNotEmpty || load.hasImage)
+            Stack(
+              children: [
+                if (load.imageMedia.isNotEmpty)
+                  _MediaCarousel(items: load.imageMedia)
+                else
+                  _Media(url: load.mediaUrl!),
+                if (load.postType != null)
+                  Positioned(
+                    top: AppSpacing.sm,
+                    left: AppSpacing.sm,
+                    child: _TypeBadge(load.postType!.name),
+                  ),
+              ],
+            )
           else if (load.hasFile)
             _FileChip(load: load),
           Padding(
@@ -90,16 +107,44 @@ class PostCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (load.title.isNotEmpty)
-                  Text(load.title, style: Theme.of(context).textTheme.titleMedium),
+                  Text(load.title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                 if ((load.body ?? '').isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.xs),
                   Text(load.body!, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+                if (load.tags.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final t in load.tags)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: context.nexveero.elevated,
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                          ),
+                          child: Text('#${t.name}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(color: context.nexveero.textSecondary)),
+                        ),
+                    ],
+                  ),
                 ],
                 const SizedBox(height: AppSpacing.md),
                 _Actions(
                   load: load,
                   onRequest: onRequest,
                   onOffer: onOffer,
+                  onViewOffer: onViewOffer,
                   onAsk: onAsk,
                   onShare: onShare,
                   onDirectMessage: onDirectMessage,
@@ -170,7 +215,7 @@ class _Header extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleMedium,
                             overflow: TextOverflow.ellipsis),
                       ),
-                      if (load.isBusiness) ...[
+                      if (load.isBusiness || (load.author?.isVerified ?? false)) ...[
                         const SizedBox(width: 4),
                         Icon(Icons.verified, size: 16, color: Theme.of(context).colorScheme.primary),
                       ],
@@ -186,6 +231,39 @@ class _Header extends StatelessWidget {
           _OverflowMenu(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
         ],
       ),
+    );
+  }
+}
+
+/// Buy / Sell (or post-type) pill shown in the corner of a post's media.
+class _TypeBadge extends StatelessWidget {
+  const _TypeBadge(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = label.toLowerCase();
+    final color = l.contains('buy')
+        ? const Color(0xFF16A34A) // green
+        : l.contains('sell')
+            ? const Color(0xFFEA580C) // orange
+            : Theme.of(context).colorScheme.primary;
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4),
+        ],
+      ),
+      child: Text(label.toUpperCase(),
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3)),
     );
   }
 }
@@ -298,13 +376,25 @@ class _OverflowMenu extends StatelessWidget {
                       subtitle: 'Remove this post',
                       danger: true,
                       onTap: () => Navigator.of(ctx).pop('delete')),
-              ] else if (load.canReport)
-                _SheetRow(
-                    icon: Icons.flag_outlined,
-                    tint: Theme.of(ctx).colorScheme.error,
-                    title: 'Report',
-                    subtitle: 'Flag this post for review',
-                    onTap: () => Navigator.of(ctx).pop('report')),
+              ] else ...[
+                if (load.canReport)
+                  _SheetRow(
+                      icon: Icons.flag_outlined,
+                      tint: Theme.of(ctx).colorScheme.error,
+                      title: 'Report',
+                      subtitle: 'Flag this post for review',
+                      onTap: () => Navigator.of(ctx).pop('report')),
+                // Admins/moderators can delete others' posts (backend grants
+                // can_delete); regular users never see this on others' posts.
+                if (load.canDelete)
+                  _SheetRow(
+                      icon: Icons.delete_outline,
+                      tint: Theme.of(ctx).colorScheme.error,
+                      title: 'Delete',
+                      subtitle: 'Remove this post',
+                      danger: true,
+                      onTap: () => Navigator.of(ctx).pop('delete')),
+              ],
             ],
           ),
         ),
@@ -510,6 +600,7 @@ class _Actions extends StatelessWidget {
     required this.load,
     required this.onRequest,
     this.onOffer,
+    this.onViewOffer,
     this.onAsk,
     this.onShare,
     this.onDirectMessage,
@@ -518,6 +609,7 @@ class _Actions extends StatelessWidget {
   final Load load;
   final VoidCallback onRequest;
   final VoidCallback? onOffer;
+  final VoidCallback? onViewOffer;
   final VoidCallback? onAsk;
   final VoidCallback? onShare;
   final VoidCallback? onDirectMessage;
@@ -548,7 +640,12 @@ class _Actions extends StatelessWidget {
             onTap: onAsk!),
       if (onShare != null)
         _ActionButton(label: 'Share', icon: Icons.ios_share, onTap: onShare!),
-      if (load.canMakeOffer && onOffer != null)
+      // Once the viewer has offered, the action becomes "View offer" (opens the
+      // existing offer chat); otherwise "Offer" when a new offer is allowed.
+      if (load.hasMyOffer && onViewOffer != null)
+        _ActionButton(
+            label: 'View offer', icon: Icons.local_offer, onTap: onViewOffer!)
+      else if (load.canMakeOffer && onOffer != null)
         _ActionButton(
             label: 'Offer', icon: Icons.sell_outlined, onTap: onOffer!),
       if (load.canReport && onReport != null)

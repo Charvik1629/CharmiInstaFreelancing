@@ -77,6 +77,20 @@ class NotificationEvent {
   bool get isQuestion => type == 'question' || type == 'question_asked';
 }
 
+/// A live `unread:update` (server → client). `conversationUnread` is that one
+/// thread's unread after the change (0 once the viewer marks it read), so the
+/// inbox can zero the matching row without a refetch.
+class UnreadUpdate {
+  const UnreadUpdate({
+    this.total,
+    this.conversationId,
+    this.conversationUnread,
+  });
+  final int? total;
+  final int? conversationId;
+  final int? conversationUnread;
+}
+
 /// Socket.IO client for live chat + unread badges (design: realtime).
 /// Connects to the `socket_url` from `GET /realtime/config`, authenticating with
 /// the stored Sanctum token, and dispatches `message:new` / `unread:update`.
@@ -100,9 +114,28 @@ class SocketService {
   final _readEvents = StreamController<ReadEvent>.broadcast();
   final _presenceEvents = StreamController<PresenceEvent>.broadcast();
   final _notifications = StreamController<NotificationEvent>.broadcast();
+  final _unreadUpdates = StreamController<UnreadUpdate>.broadcast();
+  final _connected = StreamController<void>.broadcast();
+  final _reportPending = StreamController<int?>.broadcast();
+
+  /// Live pending-report count from `report:pending` (admins). The Settings
+  /// "Reported posts" badge listens so admins see the count without reloading.
+  /// Carries null when the server didn't include a count (just "there's a new
+  /// one") — the UI then refetches the exact number.
+  Stream<int?> get reportPendingUpdates => _reportPending.stream;
+
+  /// Fires on every (re)connect. Events that arrive while the app is
+  /// backgrounded (socket dropped) are NOT replayed on reconnect, so lists and
+  /// open threads listen to this and refetch to catch up — this is what makes
+  /// new chats/messages appear on resume without a manual pull-to-refresh.
+  Stream<void> get connected => _connected.stream;
 
   /// Broadcast of incoming messages; conversation screens filter by id.
   Stream<RealtimeMessage> get messages => _messages.stream;
+
+  /// Live `unread:update` events — the inbox listens to zero a specific row and
+  /// refresh its counts without waiting for a manual pull-to-refresh.
+  Stream<UnreadUpdate> get unreadUpdates => _unreadUpdates.stream;
 
   /// Online/last-seen changes for users (from `presence:update`).
   Stream<PresenceEvent> get presenceEvents => _presenceEvents.stream;
@@ -136,20 +169,36 @@ class SocketService {
       final res =
           await _client.get<Map<String, dynamic>>(ApiEndpoints.realtimeConfig);
       final data = res.data?['data'];
-      final url = data is Map ? data['socket_url'] as String? : null;
+      final rawUrl = data is Map ? data['socket_url'] as String? : null;
       final token = await _storage.readSecure(StorageKeys.authToken);
-      if (url == null || url.isEmpty || token == null) {
+      if (rawUrl == null || rawUrl.isEmpty || token == null) {
         _log('✗ no socket_url/token — realtime disabled, falling back to polling');
         return;
       }
-      _log('→ connecting to $url');
+      // The backend often reports a loopback socket_url (e.g.
+      // http://127.0.0.1:3001) from its own host — unreachable from a phone. In
+      // that case point the socket at the app's own API host (same base URL),
+      // keeping the port the server advertised.
+      final url = _resolveSocketUrl(rawUrl);
+      _log('→ connecting to $url (from $rawUrl)');
 
       final socket = io.io(
         url,
         io.OptionBuilder()
+            // Flutter's socket_io_client long-polling (XHR) transport is
+            // unreliable and intermittently times out the handshake — on-device
+            // testing showed polling+websocket connecting only sometimes. The
+            // server supports a direct websocket upgrade (handshake advertises
+            // upgrades:["websocket"]) and nginx proxies wss, so use websocket
+            // only — the reliable transport for the Dart client. Reconnect with
+            // backoff so a dropped socket (background/network blip) recovers.
             .setTransports(['websocket'])
             .disableAutoConnect()
             .setAuth({'token': token})
+            .enableReconnection()
+            .setReconnectionAttempts(9999)
+            .setReconnectionDelay(2000)
+            .setReconnectionDelayMax(10000)
             .build(),
       );
       _socket = socket;
@@ -157,6 +206,7 @@ class SocketService {
       socket.onConnect((_) {
         _log('✓ connected ($url)');
         _startHeartbeat();
+        if (!_connected.isClosed) _connected.add(null);
       });
       socket.onDisconnect((r) {
         _log('✗ disconnected ($r)');
@@ -173,11 +223,37 @@ class SocketService {
       // Added to / changed membership of a group → refresh the inbox live.
       socket.on('group:added', _onGroupChange);
       socket.on('group:membership', _onGroupChange);
-      // Live notifications (new question on a post, offers, …).
+      // Admin realtime: new post report / new signup pending approval.
+      socket.on('report:pending', _onReportPending);
+      socket.on('user:pending', _onUserPending);
+      // Group join requests (admin sees pending; requester sees the result).
+      socket.on('join_request:pending', _onJoinRequestPending);
+      socket.on('join_request:updated', _onGroupChange);
+      // Legacy/compat: if the server ever emits a generic notification.
       socket.on('notification:new', _onNotification);
       socket.connect();
     } catch (e) {
       _log('✗ connect failed: $e');
+    }
+  }
+
+  /// Maps a loopback `socket_url` (what the backend reports from its own host,
+  /// e.g. `http://127.0.0.1:3001`) onto the app's own API host so a phone can
+  /// actually reach it — keeping the port the server advertised. A non-loopback
+  /// URL is used as-is.
+  String _resolveSocketUrl(String raw) {
+    try {
+      final u = Uri.parse(raw);
+      final host = u.host.toLowerCase();
+      final isLoopback = host.isEmpty ||
+          host == 'localhost' ||
+          host == '127.0.0.1' ||
+          host == '0.0.0.0';
+      if (!isLoopback) return raw;
+      final base = Uri.parse(AppConfig.current.baseUrl);
+      return u.replace(scheme: base.scheme, host: base.host).toString();
+    } catch (_) {
+      return raw;
     }
   }
 
@@ -280,6 +356,40 @@ class SocketService {
     _conversationCreated.add(null);
   }
 
+  /// `report:pending` → a new/updated post report (admins only). Surface it as a
+  /// live notification so admins see it without reloading the reports screen.
+  void _onReportPending(dynamic data) {
+    final json = data is Map ? Map<String, dynamic>.from(data) : const {};
+    _log('event report:pending pending=${json['pending_count']}');
+    _reportPending.add((json['pending_count'] as num?)?.toInt());
+    _notifications.add(const NotificationEvent(
+      type: 'post_report',
+      title: 'New post reported',
+      body: 'A post was reported — review it in Reported posts.',
+    ));
+  }
+
+  /// `user:pending` → a new signup (or approval change) awaiting admin review.
+  void _onUserPending(dynamic data) {
+    final json = data is Map ? Map<String, dynamic>.from(data) : const {};
+    _log('event user:pending pending=${json['pending_count']}');
+    _notifications.add(const NotificationEvent(
+      type: 'user_pending',
+      title: 'New signup pending',
+      body: 'A new account is awaiting approval.',
+    ));
+  }
+
+  /// `join_request:pending` → someone asked to join a group you manage.
+  void _onJoinRequestPending(dynamic data) {
+    _log('event join_request:pending');
+    _notifications.add(const NotificationEvent(
+      type: 'group_join_request',
+      title: 'New group join request',
+    ));
+    _conversationCreated.add(null);
+  }
+
   void _onNotification(dynamic data) {
     if (data is! Map) return;
     final json = Map<String, dynamic>.from(data);
@@ -376,6 +486,12 @@ class SocketService {
     if (data is! Map) return;
     final json = Map<String, dynamic>.from(data);
     _log('event unread:update total=${json['total']}');
+    // Inbox rows listen to this regardless of the global badge cubit.
+    _unreadUpdates.add(UnreadUpdate(
+      total: (json['total'] as num?)?.toInt(),
+      conversationId: (json['conversation_id'] as num?)?.toInt(),
+      conversationUnread: (json['conversation_unread'] as num?)?.toInt(),
+    ));
     if (!sl.isRegistered<UnreadCubit>()) return;
     sl<UnreadCubit>().setCounts(UnreadCounts(
       total: (json['total'] as num?)?.toInt() ?? 0,
@@ -389,5 +505,20 @@ class SocketService {
     _stopHeartbeat();
     _socket?.dispose();
     _socket = null;
+  }
+
+  /// Call when the app returns to the foreground. If the socket dropped while
+  /// backgrounded it reconnects (onConnect then fires [connected]); if it stayed
+  /// connected we still fire [connected] so lists/threads refetch and catch up
+  /// anything that changed server-side while we were away.
+  void onAppResumed() {
+    final socket = _socket;
+    if (socket == null) {
+      connect();
+    } else if (!socket.connected) {
+      socket.connect();
+    } else if (!_connected.isClosed) {
+      _connected.add(null);
+    }
   }
 }

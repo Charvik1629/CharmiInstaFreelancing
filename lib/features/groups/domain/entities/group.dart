@@ -63,20 +63,40 @@ class Group extends Equatable {
 
 /// A group member (GET /groups/{id}/members).
 class GroupMember extends Equatable {
-  const GroupMember({required this.id, required this.name, this.avatarUrl, this.role});
+  const GroupMember({
+    required this.id,
+    required this.name,
+    this.avatarUrl,
+    this.role,
+    this.isSystemAdmin = false,
+    this.isCreator = false,
+  });
 
   final int id;
   final String name;
   final String? avatarUrl;
   final String? role;
 
+  /// Platform/system admins are auto-added to every group but must never be
+  /// shown in the member list — unless they are also this group's creator.
+  final bool isSystemAdmin;
+
+  /// This group's creator/owner.
+  final bool isCreator;
+
+  /// A system admin who isn't the group's creator is hidden from the list.
+  bool get hiddenFromMembers => isSystemAdmin && !isCreator;
+
   factory GroupMember.fromJson(Map<String, dynamic> json) => GroupMember(
         id: json.asIntOr('id', 0),
         name: json.asStringOr('name', ''),
         avatarUrl: json.asString('avatar_url'),
         role: json.asString('role'),
+        isSystemAdmin: json.asBool('is_system_admin'),
+        isCreator: json.asBool('is_creator'),
       );
 
   @override
-  List<Object?> get props => [id, name, avatarUrl, role];
+  List<Object?> get props =>
+      [id, name, avatarUrl, role, isSystemAdmin, isCreator];
 }

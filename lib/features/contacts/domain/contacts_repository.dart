@@ -1,24 +1,27 @@
 import '../../../core/error/failure.dart';
+import '../../../core/network/base_repository.dart';
 import '../../../core/utils/result.dart';
 import '../data/contacts_data_source.dart';
+import '../data/contacts_remote_data_source.dart';
+import 'contact_match.dart';
 import 'contact_sync_payload.dart';
 
-/// Contact-sync domain contract. Reading + payload building work today; the
-/// upload is stubbed because `/contacts/sync` does not exist yet (see
-/// MISSING_APIS / ApiEndpoints.contactSync placeholder).
+/// Contact-sync domain contract: read the device address book, then check which
+/// numbers belong to approved Nexveero users via `POST /contacts/sync`.
 abstract class ContactsRepository {
   /// Reads device contacts and returns a normalized, de-duplicated payload.
   Future<Result<ContactSyncPayload>> buildPayload();
 
-  /// Uploads the payload once the endpoint exists. Until then it returns a
-  /// [ConfigFailure] so the UI can show "coming soon" without faking success.
-  Future<Result<void>> upload(ContactSyncPayload payload);
+  /// Uploads [phones] (address-book numbers) and returns each one's match
+  /// status (registered + the matched user when approved).
+  Future<Result<List<ContactMatch>>> sync(List<String> phones);
 }
 
-class ContactsRepositoryImpl implements ContactsRepository {
-  ContactsRepositoryImpl(this._dataSource);
+class ContactsRepositoryImpl with BaseRepository implements ContactsRepository {
+  ContactsRepositoryImpl(this._dataSource, this._remote);
 
   final ContactsDataSource _dataSource;
+  final ContactsRemoteDataSource _remote;
 
   @override
   Future<Result<ContactSyncPayload>> buildPayload() async {
@@ -31,11 +34,10 @@ class ContactsRepositoryImpl implements ContactsRepository {
   }
 
   @override
-  Future<Result<void>> upload(ContactSyncPayload payload) async {
-    // No backend endpoint yet — payload is built and ready to POST the moment
-    // `/contacts/sync` lands. Wiring is a one-liner then.
-    return const Err(
-      ConfigFailure('Contact sync needs a backend endpoint (see MISSING_APIS).'),
-    );
+  Future<Result<List<ContactMatch>>> sync(List<String> phones) {
+    if (phones.isEmpty) return Future.value(const Success(<ContactMatch>[]));
+    // The API caps at 1000 numbers per call.
+    final capped = phones.length > 1000 ? phones.sublist(0, 1000) : phones;
+    return guard(() => _remote.sync(capped));
   }
 }

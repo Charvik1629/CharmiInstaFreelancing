@@ -31,6 +31,9 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
 
   Future<void> refresh() => load();
 
+  /// Client-side text search over the loaded reports (the API has no `q` param).
+  void search(String query) => emit(state.copyWith(query: query));
+
   Future<void> setFilter(ReportStatus? filter) async {
     if (filter == state.filter) return;
     emit(state.withFilter(filter, status: ReportsStatus.loading));

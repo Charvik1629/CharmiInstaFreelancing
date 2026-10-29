@@ -225,33 +225,39 @@ class _RibbonAvatar extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            width: size,
-            height: size,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: hasImage ? null : nex.primaryGradient,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: background, width: 4),
+          GestureDetector(
+            onTap: hasImage
+                ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => FullImageView(url: imageUrl)))
+                : null,
+            child: Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                gradient: hasImage ? null : nex.primaryGradient,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: background, width: 4),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: hasImage
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      width: size,
+                      height: size,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, _, _) => Text(initials,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 26)),
+                    )
+                  : Text(initials,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 26)),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: hasImage
-                ? CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    width: size,
-                    height: size,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, _, _) => Text(initials,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 26)),
-                  )
-                : Text(initials,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 26)),
           ),
           if (user.isVerified || user.isPremium)
             Positioned(

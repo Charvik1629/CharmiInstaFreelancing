@@ -14,7 +14,10 @@ import '../../../wallet/presentation/widgets/overage_dialog.dart';
 import '../../domain/broadcast_detail.dart';
 import '../cubit/create_broadcast_cubit.dart';
 
-/// New broadcast (design): name the list, search + pick recipients, create.
+/// New broadcast (design "Create Broadcast · name · multi-select contacts"):
+/// a close + "New broadcast" header, the list name, the picked recipients as
+/// avatars (each removable), a contact search over a checkbox list, and a
+/// "Create broadcast" action.
 class CreateBroadcastPage extends StatelessWidget {
   const CreateBroadcastPage({super.key});
 
@@ -41,7 +44,9 @@ class _CreateBroadcastView extends StatelessWidget {
       context,
       cost: cost,
       balance: balance,
-      title: balance >= cost ? 'Free list limit reached' : 'Broadcast list limit over',
+      title: balance >= cost
+          ? 'Free list limit reached'
+          : 'Broadcast list limit over',
       message: balance >= cost
           ? 'Creating another broadcast list will debit $cost credits from your wallet.'
           : 'Your free broadcast lists are used up. Subscribe to keep creating.',
@@ -71,18 +76,52 @@ class _CreateBroadcastView extends StatelessWidget {
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('New broadcast'),
-          actions: const [_CreateAction()],
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: const [
+              _Header(),
+              _NameField(),
+              _SelectedRow(),
+              _SearchField(),
+              Expanded(child: _Results()),
+            ],
+          ),
         ),
-        body: Column(
-          children: [
-            const _NameField(),
-            const _SelectedChips(),
-            const _SearchField(),
-            const Expanded(child: _Results()),
-          ],
-        ),
+        bottomNavigationBar: const _CreateBar(),
+      ),
+    );
+  }
+}
+
+/// Close + "New broadcast" + "Create" header (design: no app bar).
+class _Header extends StatelessWidget {
+  const _Header();
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.sm, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: nex.border)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close, size: 24),
+            onPressed: () => context.pop(),
+          ),
+          Expanded(
+            child: Text('New broadcast',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          const _CreateAction(),
+        ],
       ),
     );
   }
@@ -94,17 +133,22 @@ class _CreateAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CreateBroadcastCubit, CreateBroadcastState>(
-      buildWhen: (p, c) => p.canSubmit != c.canSubmit || p.isSubmitting != c.isSubmitting,
+      buildWhen: (p, c) =>
+          p.canSubmit != c.canSubmit || p.isSubmitting != c.isSubmitting,
       builder: (context, state) {
         if (state.isSubmitting) {
           return const Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Center(
-                child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
         return TextButton(
-          onPressed: state.canSubmit ? () => context.read<CreateBroadcastCubit>().submit() : null,
+          onPressed: state.canSubmit
+              ? () => context.read<CreateBroadcastCubit>().submit()
+              : null,
           child: const Text('Create'),
         );
       },
@@ -118,7 +162,8 @@ class _NameField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: AppTextField(
         label: 'Broadcast name',
         hint: 'Enter list name',
@@ -129,42 +174,95 @@ class _NameField extends StatelessWidget {
   }
 }
 
-class _SelectedChips extends StatelessWidget {
-  const _SelectedChips();
+/// Selected recipients as avatars (design: "Selected · N contacts" with a
+/// cancel badge to remove each).
+class _SelectedRow extends StatelessWidget {
+  const _SelectedRow();
 
   @override
   Widget build(BuildContext context) {
+    final nex = context.nexveero;
     return BlocBuilder<CreateBroadcastCubit, CreateBroadcastState>(
       buildWhen: (p, c) => p.selected != c.selected,
       builder: (context, state) {
         if (state.selected.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Selected · ${state.selected.length} contacts',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: context.nexveero.textSecondary)),
-                const SizedBox(height: AppSpacing.xs),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Selected · ${state.selected.length} contacts',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: nex.textSecondary, fontWeight: FontWeight.w700)),
+              const SizedBox(height: AppSpacing.sm),
+              SizedBox(
+                height: 66,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
                   children: [
                     for (final u in state.selected)
-                      Chip(
-                        label: Text(u.name),
-                        onDeleted: () => context.read<CreateBroadcastCubit>().toggle(u),
+                      Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.sm),
+                        child: _SelectedAvatar(user: u),
                       ),
                   ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SelectedAvatar extends StatelessWidget {
+  const _SelectedAvatar({required this.user});
+  final User user;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    return SizedBox(
+      width: 50,
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () => context.read<CreateBroadcastCubit>().toggle(user),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AppAvatar(
+                    name: user.name,
+                    imageUrl: MediaUrl.resolve(user.avatarUrl),
+                    size: 44),
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: bg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.cancel,
+                        size: 18, color: Theme.of(context).colorScheme.error),
+                  ),
                 ),
               ],
             ),
           ),
-        );
-      },
+          const SizedBox(height: 4),
+          Text(user.name.split(' ').first,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: nex.textSecondary, fontSize: 9)),
+        ],
+      ),
     );
   }
 }
@@ -175,10 +273,10 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
       child: AppTextField(
-        label: 'Add recipients',
-        hint: 'Search people',
+        hint: 'Search contacts',
         prefixIcon: Icons.search,
         onChanged: (v) => context.read<CreateBroadcastCubit>().search(v),
       ),
@@ -186,6 +284,7 @@ class _SearchField extends StatelessWidget {
   }
 }
 
+/// Contact list with a leading checkbox (design: checkbox + avatar + name).
 class _Results extends StatelessWidget {
   const _Results();
 
@@ -206,19 +305,87 @@ class _Results extends StatelessWidget {
           itemBuilder: (context, i) {
             final User u = state.results[i];
             final selected = context.read<CreateBroadcastCubit>().isSelected(u);
-            return ListTile(
-              leading: AppAvatar(
-                  name: u.name, imageUrl: MediaUrl.resolve(u.avatarUrl), size: 40),
-              title: Text(u.name),
-              trailing: Icon(
-                selected ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: selected ? Theme.of(context).colorScheme.primary : context.nexveero.iconInactive,
-              ),
-              onTap: () => context.read<CreateBroadcastCubit>().toggle(u),
-            );
+            return _ContactRow(user: u, selected: selected);
           },
         );
       },
+    );
+  }
+}
+
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({required this.user, required this.selected});
+  final User user;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return InkWell(
+      onTap: () => context.read<CreateBroadcastCubit>().toggle(user),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                gradient: selected ? nex.primaryGradient : null,
+                borderRadius: BorderRadius.circular(6),
+                border:
+                    selected ? null : Border.all(color: nex.border, width: 1.5),
+              ),
+              child: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            AppAvatar(
+                name: user.name,
+                imageUrl: MediaUrl.resolve(user.avatarUrl),
+                size: 40),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(user.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom "Create broadcast" gradient button (design: prominent CTA).
+class _CreateBar extends StatelessWidget {
+  const _CreateBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: context.nexveero.elevated,
+      child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.md),
+        child: BlocBuilder<CreateBroadcastCubit, CreateBroadcastState>(
+          buildWhen: (p, c) =>
+              p.canSubmit != c.canSubmit || p.isSubmitting != c.isSubmitting,
+          builder: (context, state) {
+            return AppButton(
+              label: 'Create broadcast',
+              isLoading: state.isSubmitting,
+              onPressed: state.canSubmit
+                  ? () => context.read<CreateBroadcastCubit>().submit()
+                  : null,
+            );
+          },
+        ),
+      ),
     );
   }
 }

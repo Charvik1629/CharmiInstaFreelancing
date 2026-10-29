@@ -2,6 +2,7 @@
 /// reusable UI kit built in Module 2.
 library;
 export 'app_avatar.dart';
+export 'full_image_view.dart';
 export 'app_bottom_nav.dart';
 export 'app_button.dart';
 export 'app_loader.dart';

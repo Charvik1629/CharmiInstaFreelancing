@@ -22,7 +22,7 @@ class MessagePage {
 /// under /chats + /conversations; broadcasts under /broadcasts.
 abstract class ChatRemoteDataSource {
   /// GET /chats — direct + group conversations (WhatsApp-style inbox).
-  Future<List<Conversation>> getChats({String? hasMedia, bool hasLinks});
+  Future<List<Conversation>> getChats({String? hasMedia, bool hasLinks, String? q});
 
   /// GET /broadcasts — the user's broadcast lists.
   Future<List<Conversation>> getBroadcasts();
@@ -126,10 +126,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
   @override
   Future<List<Conversation>> getChats(
-      {String? hasMedia, bool hasLinks = false}) async {
+      {String? hasMedia, bool hasLinks = false, String? q}) async {
     final res = await _client.get<Map<String, dynamic>>(
       ApiEndpoints.chats,
-      query: {'has_media': ?hasMedia, if (hasLinks) 'has_links': 1},
+      query: {
+        'has_media': ?hasMedia,
+        if (hasLinks) 'has_links': 1,
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+      },
     );
     return _list(res.data, Conversation.fromChatJson);
   }

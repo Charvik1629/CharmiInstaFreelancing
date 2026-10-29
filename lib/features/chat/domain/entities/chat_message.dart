@@ -78,6 +78,31 @@ class ChatMessage extends Equatable {
 
   bool get isOrder => order != null;
 
+  /// The server posts an offer as a plain `text` message whose body is the
+  /// remarks with the price appended, e.g. "offer test\n\nOffer price:
+  /// 157,852.00" (there is no dedicated offer message type). This matches that
+  /// trailing price line so the message can render as a distinct offer bubble.
+  static final RegExp _offerPriceRe =
+      RegExp(r'(?:\n|^)\s*offer price:\s*(.+?)\s*$', caseSensitive: false);
+
+  /// Whether this message is an offer (remarks + an "Offer price:" line).
+  bool get isOffer =>
+      !isSystem &&
+      !isInquiry &&
+      !isLocation &&
+      !isOrder &&
+      _offerPriceRe.hasMatch(body ?? '');
+
+  /// The offer's price portion, e.g. "157,852.00". Null when absent.
+  String? get offerPrice => _offerPriceRe.firstMatch(body ?? '')?.group(1)?.trim();
+
+  /// The offer's remarks — the body with the trailing price line removed.
+  /// Null when the offer carried no remarks.
+  String? get offerRemarks {
+    final stripped = (body ?? '').replaceAll(_offerPriceRe, '').trim();
+    return stripped.isEmpty ? null : stripped;
+  }
+
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
 
   /// A non-image attachment (video/audio/file) that renders as a chip.

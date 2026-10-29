@@ -15,8 +15,9 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
 
   @override
   Future<Result<List<Conversation>>> getChats(
-          {String? hasMedia, bool hasLinks = false}) =>
-      guard(() => _remote.getChats(hasMedia: hasMedia, hasLinks: hasLinks));
+          {String? hasMedia, bool hasLinks = false, String? q}) =>
+      guard(() =>
+          _remote.getChats(hasMedia: hasMedia, hasLinks: hasLinks, q: q));
 
   @override
   Future<Result<List<Conversation>>> getBroadcasts() =>

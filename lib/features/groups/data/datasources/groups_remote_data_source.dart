@@ -10,6 +10,13 @@ abstract class GroupsRemoteDataSource {
   Future<Group> getGroup(int id);
   Future<List<GroupMember>> getMembers(int id);
 
+  /// POST /groups — create a group ([name] required; optional initial members).
+  Future<Group> createGroup({
+    required String name,
+    String? description,
+    List<int> userIds,
+  });
+
   /// POST /groups/{id}/join-requests — request to join a (private) group.
   Future<void> requestJoin(int id);
 
@@ -54,6 +61,24 @@ class GroupsRemoteDataSourceImpl implements GroupsRemoteDataSource {
   @override
   Future<Group> getGroup(int id) async {
     final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.group(id));
+    return ApiEnvelope.object(res.data, Group.fromJson);
+  }
+
+  @override
+  Future<Group> createGroup({
+    required String name,
+    String? description,
+    List<int> userIds = const [],
+  }) async {
+    final res = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.groups,
+      data: {
+        'name': name,
+        if (description != null && description.trim().isNotEmpty)
+          'description': description.trim(),
+        if (userIds.isNotEmpty) 'user_ids': userIds,
+      },
+    );
     return ApiEnvelope.object(res.data, Group.fromJson);
   }
 

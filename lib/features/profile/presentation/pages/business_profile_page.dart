@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
+import '../../../../core/models/load.dart';
 import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
@@ -50,7 +52,15 @@ class _BusinessProfileView extends StatelessWidget {
               onRetry: () => context.read<BusinessProfileCubit>().load(),
             );
           }
-          return _Body(user: state.user!, isVerified: state.isVerified);
+          return RefreshIndicator(
+            onRefresh: () => context.read<BusinessProfileCubit>().load(),
+            child: _Body(
+              user: state.user!,
+              isVerified: state.isVerified,
+              posts: state.posts,
+              postsStatus: state.postsStatus,
+            ),
+          );
         },
       ),
     );
@@ -58,10 +68,17 @@ class _BusinessProfileView extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.user, required this.isVerified});
+  const _Body({
+    required this.user,
+    required this.isVerified,
+    required this.posts,
+    required this.postsStatus,
+  });
 
   final User user;
   final bool isVerified;
+  final List<Load> posts;
+  final PostsStatus postsStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +92,7 @@ class _Body extends StatelessWidget {
         : null;
 
     return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         // Gradient cover with back + share, and the avatar overlapping it.
         SliverToBoxAdapter(
@@ -188,7 +206,11 @@ class _Body extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.2)),
                 const SizedBox(height: AppSpacing.md),
-                _PostsGrid(count: user.postsCount),
+                _PostsGrid(
+                  posts: posts,
+                  postsStatus: postsStatus,
+                  postsCount: user.postsCount,
+                ),
               ],
             ),
           ),
@@ -247,25 +269,31 @@ class _SquareAvatar extends StatelessWidget {
     const size = 82.0;
     final initials = _initials(user.businessName ?? user.name);
 
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: hasImage ? null : nex.primaryGradient,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: background, width: 4),
+    return GestureDetector(
+      onTap: hasImage
+          ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => FullImageView(url: imageUrl)))
+          : null,
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: hasImage ? null : nex.primaryGradient,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: background, width: 4),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: hasImage
+            ? CachedNetworkImage(
+                imageUrl: imageUrl,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) => _InitialsText(initials),
+              )
+            : _InitialsText(initials),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: hasImage
-          ? CachedNetworkImage(
-              imageUrl: imageUrl,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              errorWidget: (_, _, _) => _InitialsText(initials),
-            )
-          : _InitialsText(initials),
     );
   }
 }
@@ -335,16 +363,40 @@ class _BusinessCard extends StatelessWidget {
   }
 }
 
-/// The posts grid (design placeholders until the posts feed is bound).
+/// The posts grid: real post covers gathered from the feed (filtered by author
+/// id), each tile opening its detail on tap. Posts without an image fall back to
+/// a text tile; while the feed is still being scanned, placeholder tiles sized
+/// to the known count keep the section from jumping.
 class _PostsGrid extends StatelessWidget {
-  const _PostsGrid({required this.count});
+  const _PostsGrid({
+    required this.posts,
+    required this.postsStatus,
+    required this.postsCount,
+  });
 
-  final int count;
+  final List<Load> posts;
+  final PostsStatus postsStatus;
+  final int postsCount;
 
   @override
   Widget build(BuildContext context) {
     final nex = context.nexveero;
-    if (count <= 0) {
+
+    if (postsStatus == PostsStatus.loading ||
+        postsStatus == PostsStatus.initial) {
+      final tiles = postsCount.clamp(1, 9);
+      return _grid([
+        for (var i = 0; i < tiles; i++)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: nex.elevated,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+          ),
+      ]);
+    }
+
+    if (posts.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
         child: Center(
@@ -353,25 +405,67 @@ class _PostsGrid extends StatelessWidget {
         ),
       );
     }
-    final tiles = count > 9 ? 9 : count;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      itemCount: tiles,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+
+    return _grid([for (final load in posts) _PostTile(load: load)]);
+  }
+
+  Widget _grid(List<Widget> children) => GridView.count(
         crossAxisCount: 3,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
         mainAxisSpacing: AppSpacing.sm,
         crossAxisSpacing: AppSpacing.sm,
-      ),
-      itemBuilder: (context, i) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: nex.elevated,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
+        children: children,
+      );
+}
+
+/// A single post tile: the post's cover (first carousel image, else the legacy
+/// cover) or a text fallback, tappable to its detail.
+class _PostTile extends StatelessWidget {
+  const _PostTile({required this.load});
+  final Load load;
+
+  String? get _coverUrl {
+    if (load.imageMedia.isNotEmpty) return load.imageMedia.first.url;
+    if (load.hasImage) return load.mediaUrl;
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    final cover = _coverUrl;
+    return GestureDetector(
+      onTap: () => context.push(AppRoutes.postDetail, extra: load),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: cover != null
+            ? CachedNetworkImage(
+                imageUrl: MediaUrl.resolve(cover) ?? cover,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) => _textTile(context, nex),
+              )
+            : _textTile(context, nex),
       ),
     );
   }
+
+  Widget _textTile(BuildContext context, NexveeroColors nex) => Container(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        color: nex.elevated,
+        alignment: Alignment.center,
+        child: Text(
+          load.title,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: nex.textSecondary),
+        ),
+      );
 }
 
 String _initials(String name) {

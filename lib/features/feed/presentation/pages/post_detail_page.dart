@@ -10,6 +10,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../chat/domain/entities/conversation.dart';
 import '../../../offers/presentation/widgets/make_offer_sheet.dart';
 import '../../domain/repositories/feed_repository.dart';
 import '../widgets/ask_question_sheet.dart';
@@ -19,10 +20,24 @@ import '../widgets/report_sheet.dart';
 /// with a verified tick, an image carousel with page dots, the
 /// Ask · Share · Offer · Report icon-action row, a bold-username caption and an
 /// uppercase timestamp. Receives the [Load] via router `extra`.
-class PostDetailPage extends StatelessWidget {
+class PostDetailPage extends StatefulWidget {
   const PostDetailPage({super.key, required this.load});
 
   final Load load;
+
+  @override
+  State<PostDetailPage> createState() => _PostDetailPageState();
+}
+
+class _PostDetailPageState extends State<PostDetailPage> {
+  /// Local mutable copy so the action row can flip to "View offer" in place
+  /// after the viewer makes (or is found to already have) an offer.
+  late Load load = widget.load;
+
+  /// What to hand back to the opener (the feed) when this page is popped: the
+  /// edited [Load] after an edit, the string 'deleted' after a delete, or null
+  /// when nothing changed. Lets the feed update that row without a full refresh.
+  Object? _popResult;
 
   Future<void> _request(BuildContext context) async {
     final result = await sl<FeedRepository>().requestLoad(load.id);
@@ -32,9 +47,39 @@ class PostDetailPage extends StatelessWidget {
   }
 
   Future<void> _offer(BuildContext context) async {
-    final offer =
+    final result =
         await MakeOfferSheet.show(context, loadId: load.id, loadTitle: load.title);
-    if (offer != null && context.mounted) AppOverlays.snack(context, 'Offer sent');
+    if (result == null || !context.mounted) return;
+    // Flip the action row to "View offer" and remember the opened thread.
+    setState(() => load = load.copyWith(
+          viewerHasOffer: true,
+          offerConversationId: result.conversationId,
+        ));
+    if (result.alreadyExisted) {
+      // Re-offer blocked by the server (409) — go straight into the chat.
+      _openOfferChat(context);
+    } else {
+      AppOverlays.snack(context, 'Offer sent');
+    }
+  }
+
+  /// Opens the viewer's existing offer chat for this post.
+  void _viewOffer(BuildContext context) => _openOfferChat(context);
+
+  void _openOfferChat(BuildContext context) {
+    final id = load.offerConversationId;
+    if (id == null) return;
+    context.push(
+      AppRoutes.chatThread,
+      extra: Conversation(
+        id: id,
+        type: ConversationType.direct,
+        title: load.author?.name ?? 'Offer',
+        avatarUrl: load.author?.avatarUrl,
+        peerId: load.author?.id,
+        loadId: load.id,
+      ),
+    );
   }
 
   Future<void> _ask(BuildContext context) async {
@@ -85,7 +130,8 @@ class PostDetailPage extends StatelessWidget {
     if (!context.mounted) return;
     if (result.isSuccess) {
       AppOverlays.snack(context, 'Post deleted');
-      context.pop();
+      _popResult = 'deleted';
+      context.pop(_popResult);
     } else {
       AppOverlays.snack(context, result.failureOrNull?.message ?? 'Delete failed');
     }
@@ -175,6 +221,16 @@ class PostDetailPage extends StatelessWidget {
                 title: const Text('Report'),
                 onTap: () => Navigator.of(ctx).pop('report'),
               ),
+            // Admins/moderators can delete others' posts (backend can_delete).
+            if (load.canDelete)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.delete_outline,
+                    color: Theme.of(ctx).colorScheme.error),
+                title: Text('Delete',
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                onTap: () => Navigator.of(ctx).pop('delete'),
+              ),
           ],
         ],
       ),
@@ -182,7 +238,13 @@ class PostDetailPage extends StatelessWidget {
     if (action == null || !context.mounted) return;
     switch (action) {
       case 'edit':
-        context.push(AppRoutes.createPost, extra: load);
+        final updated = await context.push<Load>(AppRoutes.createPost, extra: load);
+        if (updated != null && mounted) {
+          setState(() {
+            load = updated;
+            _popResult = updated;
+          });
+        }
       case 'boost':
         _boost(context);
       case 'sold':
@@ -198,6 +260,19 @@ class PostDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      // Intercept every back (app-bar, gesture, system) so we can hand the edit
+      // / delete result back to the feed, which updates that row in place.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !context.mounted) return;
+        context.pop(_popResult);
+      },
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     final nex = context.nexveero;
     final texts = Theme.of(context).textTheme;
     final images = [
@@ -307,7 +382,14 @@ class PostDetailPage extends StatelessWidget {
                         label: 'Share',
                         onTap: () => _share(context)),
                   ),
-                  if (load.canMakeOffer)
+                  if (load.hasMyOffer)
+                    Expanded(
+                      child: _ActionIcon(
+                          icon: Icons.local_offer,
+                          label: 'View offer',
+                          onTap: () => _viewOffer(context)),
+                    )
+                  else if (load.canMakeOffer)
                     Expanded(
                       child: _ActionIcon(
                           icon: Icons.sell_outlined,
@@ -342,6 +424,29 @@ class PostDetailPage extends StatelessWidget {
                             .join('  ')),
                   ],
                 ),
+              ),
+            ),
+          if (load.tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xs),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in load.tags)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: nex.elevated,
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                      child: Text('#${t.name}',
+                          style: texts.labelSmall
+                              ?.copyWith(color: nex.textSecondary)),
+                    ),
+                ],
               ),
             ),
           if (load.createdAt != null)

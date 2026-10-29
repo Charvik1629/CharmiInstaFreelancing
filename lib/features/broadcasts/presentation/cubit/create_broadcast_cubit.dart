@@ -18,7 +18,26 @@ class CreateBroadcastCubit extends Cubit<CreateBroadcastState> {
   final BroadcastsRepository _broadcasts;
   final SearchRepository _search;
 
+  /// When set, [submit] edits this existing group (PUT) instead of creating one.
+  int? _editingId;
+
+  /// Pre-fills the form to edit an existing broadcast group. Call once before
+  /// the first build.
+  void initForEdit(BroadcastDetail group) {
+    _editingId = group.id;
+    emit(state.copyWith(
+      name: group.name,
+      description: group.description ?? '',
+      selected: group.recipients,
+    ));
+  }
+
+  bool get isEditing => _editingId != null;
+
   void setName(String v) => emit(state.copyWith(name: v, clearError: true));
+
+  void setDescription(String v) =>
+      emit(state.copyWith(description: v, clearError: true));
 
   Future<void> search(String query) async {
     final q = query.trim();
@@ -47,10 +66,15 @@ class CreateBroadcastCubit extends Cubit<CreateBroadcastState> {
   Future<void> submit() async {
     if (state.isSubmitting || !state.canSubmit) return;
     emit(state.copyWith(status: CreateStatus.submitting, clearError: true));
-    final result = await _broadcasts.create(
-      name: state.name.trim(),
-      userIds: state.selected.map((u) => u.id).toList(),
-    );
+    final name = state.name.trim();
+    final description =
+        state.description.trim().isEmpty ? null : state.description.trim();
+    final userIds = state.selected.map((u) => u.id).toList();
+    final result = _editingId != null
+        ? await _broadcasts.update(_editingId!,
+            name: name, description: description, userIds: userIds)
+        : await _broadcasts.create(
+            name: name, description: description, userIds: userIds);
     switch (result) {
       case Success(value: final detail):
         emit(state.copyWith(status: CreateStatus.success, created: detail));

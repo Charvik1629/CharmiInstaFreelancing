@@ -67,6 +67,8 @@ class Load extends Equatable {
     this.canMakeOffer = false,
     this.canReport = false,
     this.viewerHasRequested = false,
+    this.viewerHasOffer = false,
+    this.offerConversationId,
     this.conversationId,
     this.shareUrl,
     this.tags = const [],
@@ -100,7 +102,21 @@ class Load extends Equatable {
   final bool canMakeOffer;
   final bool canReport;
   final bool viewerHasRequested;
+
+  /// Whether the authenticated viewer has already made an offer on this load
+  /// (API `viewer_has_offer`). Drives the "View offer" state so a user can't
+  /// make a second offer.
+  final bool viewerHasOffer;
+
+  /// The chat thread for the viewer's existing offer (API
+  /// `offer_conversation_id`), used to deep-link into it from "View offer".
+  final int? offerConversationId;
+
   final int? conversationId;
+
+  /// True when the viewer already has an offer on this load — either the server
+  /// flagged it (`viewer_has_offer`) or it handed back the offer's thread id.
+  bool get hasMyOffer => viewerHasOffer || offerConversationId != null;
 
   /// Canonical HTTPS link for the Share button (API `share_url`).
   final String? shareUrl;
@@ -143,6 +159,8 @@ class Load extends Equatable {
       canMakeOffer: json.asBool('can_make_offer'),
       canReport: json.asBool('can_report'),
       viewerHasRequested: json.asBool('viewer_has_requested'),
+      viewerHasOffer: json.asBool('viewer_has_offer'),
+      offerConversationId: json.asInt('offer_conversation_id'),
       conversationId: json.asInt('conversation_id'),
       shareUrl: json.asString('share_url'),
       tags: _parseTags(json['tags']),
@@ -188,6 +206,8 @@ class Load extends Equatable {
 
   Load copyWith({
     bool? viewerHasRequested,
+    bool? viewerHasOffer,
+    int? offerConversationId,
     int? conversationId,
     String? status,
     bool? isBoosted,
@@ -215,6 +235,8 @@ class Load extends Equatable {
       canMakeOffer: canMakeOffer,
       canReport: canReport,
       viewerHasRequested: viewerHasRequested ?? this.viewerHasRequested,
+      viewerHasOffer: viewerHasOffer ?? this.viewerHasOffer,
+      offerConversationId: offerConversationId ?? this.offerConversationId,
       conversationId: conversationId ?? this.conversationId,
       shareUrl: shareUrl,
       tags: tags,
@@ -226,5 +248,6 @@ class Load extends Equatable {
   List<Object?> get props => [
         id, title, body, mediaUrl, mediaKind, media, status, isBoosted, isBusiness,
         postType, author, isOwn, canMessage, viewerHasRequested, conversationId,
+        viewerHasOffer, offerConversationId,
       ];
 }

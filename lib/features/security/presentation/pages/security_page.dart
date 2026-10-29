@@ -123,7 +123,12 @@ class _SecurityViewState extends State<_SecurityView> {
             onChanged: state.saving
                 ? null
                 : (v) {
-                    setState(() => _enabled = v);
+                    setState(() {
+                      _enabled = v;
+                      // Turning Set PIN on selects "Set your own" (the first
+                      // segment) by default so the PIN entry is ready to type.
+                      if (v) _own = true;
+                    });
                     context.read<SecurityCubit>().setEnabled(v);
                   },
           ),
@@ -167,8 +172,10 @@ class _SecurityViewState extends State<_SecurityView> {
           Text('Enter 4-digit PIN',
               style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: AppSpacing.md),
-          // Password-style: digits mask to dots as you type (numeric keyboard).
-          PinCells(controller: _pin, mask: true),
+          // Autofocus so the numeric keyboard opens immediately and typing
+          // lands in the cells; digits stay visible (mask off) so the user can
+          // see the PIN they're setting.
+          PinCells(controller: _pin, autofocus: true),
           const SizedBox(height: AppSpacing.lg),
           AppButton(
             label: 'Submit',

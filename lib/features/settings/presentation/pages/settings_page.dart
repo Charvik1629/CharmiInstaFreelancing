@@ -1,18 +1,71 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/injection.dart';
+import '../../../../core/realtime/socket_service.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_cubit.dart';
+import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../admin/domain/entities/report.dart';
+import '../../../admin/domain/repositories/admin_repository.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 
 /// Full Settings screen (design "Settings"). Appearance + account actions are
 /// functional; push-notification prefs and account deletion are gated (no API).
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  /// Count of pending (unreviewed) post reports — shown as a badge on the
+  /// "Reported posts" row so admins know something needs review. Fetched on
+  /// open and kept live via the socket `report:pending` event.
+  int _pendingReports = 0;
+  StreamSubscription<int?>? _reportSub;
+  bool _didInit = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didInit) return;
+    _didInit = true;
+    final isAdmin = context.read<AuthCubit>().state.user?.isAdmin ?? false;
+    if (!isAdmin) return;
+    _loadPendingReports();
+    if (sl.isRegistered<SocketService>()) {
+      _reportSub = sl<SocketService>().reportPendingUpdates.listen((count) {
+        if (count != null) {
+          if (mounted) setState(() => _pendingReports = count);
+        } else {
+          _loadPendingReports(); // server didn't send a count — refetch exact
+        }
+      });
+    }
+  }
+
+  Future<void> _loadPendingReports() async {
+    if (!sl.isRegistered<AdminRepository>()) return;
+    final result =
+        await sl<AdminRepository>().getReports(status: ReportStatus.pending);
+    if (result case Success(value: final page) when mounted) {
+      setState(() => _pendingReports = page.meta.total ?? page.items.length);
+    }
+  }
+
+  @override
+  void dispose() {
+    _reportSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +119,11 @@ class SettingsPage extends StatelessWidget {
             _NavTile(
               icon: Icons.flag_outlined,
               title: 'Reported posts',
-              onTap: () => context.push(AppRoutes.adminReports),
+              badgeCount: _pendingReports,
+              onTap: () async {
+                await context.push(AppRoutes.adminReports);
+                _loadPendingReports(); // refresh after reviewing
+              },
             ),
             _NavTile(
               icon: Icons.campaign_outlined,
@@ -225,18 +282,44 @@ class _NavTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String title;
   final VoidCallback onTap;
 
+  /// When > 0, a red count pill is shown before the chevron (e.g. pending
+  /// reports awaiting review).
+  final int badgeCount;
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: context.nexveero.textSecondary),
       title: Text(title),
-      trailing: const Icon(Icons.chevron_right, size: 20),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (badgeCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+              child: Text(
+                badgeCount > 99 ? '99+' : '$badgeCount',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          const SizedBox(width: AppSpacing.sm),
+          const Icon(Icons.chevron_right, size: 20),
+        ],
+      ),
       onTap: onTap,
     );
   }

@@ -29,10 +29,16 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     final requests = isManager
         ? await _repository.getJoinRequests(groupId)
         : const Success<List<GroupJoinRequest>>([]);
+    // Platform/system admins are auto-added to every group — hide them, unless
+    // the admin is also this group's creator.
+    final allMembers = members.valueOrNull ?? const [];
+    final visibleMembers =
+        allMembers.where((m) => !m.hiddenFromMembers).toList();
     emit(state.copyWith(
       status: DetailStatus.loaded,
       group: (groupResult as Success<Group>).value,
-      members: members.valueOrNull ?? const [],
+      members: visibleMembers,
+      hiddenMemberCount: allMembers.length - visibleMembers.length,
       joinRequests: requests.valueOrNull ?? const [],
     ));
   }

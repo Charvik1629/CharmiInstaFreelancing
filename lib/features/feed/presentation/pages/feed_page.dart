@@ -91,10 +91,36 @@ class _FeedViewState extends State<_FeedView> {
   }
 
   Future<void> _offer(Load load) async {
-    final offer = await MakeOfferSheet.show(context,
+    final feed = context.read<FeedCubit>();
+    final result = await MakeOfferSheet.show(context,
         loadId: load.id, loadTitle: load.title);
-    if (offer == null || !mounted) return;
-    AppOverlays.snack(context, 'Offer sent');
+    if (result == null || !mounted) return;
+    // Flip the card to "View offer" and remember the opened thread.
+    feed.markOffered(load, result.conversationId);
+    if (result.alreadyExisted) {
+      // Re-offer blocked by the server (409) — go straight into the chat.
+      _openOfferChat(load, result.conversationId);
+    } else {
+      AppOverlays.snack(context, 'Offer sent');
+    }
+  }
+
+  /// Opens the viewer's existing offer chat for a post.
+  void _viewOffer(Load load) => _openOfferChat(load, load.offerConversationId);
+
+  void _openOfferChat(Load load, int? conversationId) {
+    if (conversationId == null) return;
+    context.push(
+      AppRoutes.chatThread,
+      extra: Conversation(
+        id: conversationId,
+        type: ConversationType.direct,
+        title: load.author?.name ?? 'Offer',
+        avatarUrl: load.author?.avatarUrl,
+        peerId: load.author?.id,
+        loadId: load.id,
+      ),
+    );
   }
 
   Future<void> _request(Load load) async {
@@ -248,6 +274,7 @@ class _FeedViewState extends State<_FeedView> {
       ),
       body: Column(
         children: [
+          const _FeedSearchBar(),
           const _FilterBar(),
           Expanded(
             child: BlocBuilder<FeedCubit, FeedState>(
@@ -258,6 +285,7 @@ class _FeedViewState extends State<_FeedView> {
                 onReport: _report,
                 onDelete: _delete,
                 onOffer: _offer,
+                onViewOffer: _viewOffer,
                 onBoost: _boost,
                 onMarkSold: _markSold,
                 onAsk: _ask,
@@ -267,6 +295,75 @@ class _FeedViewState extends State<_FeedView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Inline feed search: typing filters the feed server-side (via FeedCubit's
+/// `q`) without leaving the Home screen.
+class _FeedSearchBar extends StatefulWidget {
+  const _FeedSearchBar();
+
+  @override
+  State<_FeedSearchBar> createState() => _FeedSearchBarState();
+}
+
+class _FeedSearchBarState extends State<_FeedSearchBar> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: nex.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 20, color: nex.iconInactive),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                textInputAction: TextInputAction.search,
+                onChanged: (q) {
+                  context.read<FeedCubit>().setSearch(q);
+                  setState(() {}); // toggle the clear (×) button
+                },
+                decoration: const InputDecoration(
+                  isDense: true,
+                  filled: false,
+                  hintText: 'Search posts…',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            if (_controller.text.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _controller.clear();
+                  context.read<FeedCubit>().setSearch('');
+                  setState(() {});
+                },
+                child: Icon(Icons.close, size: 18, color: nex.iconInactive),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -308,6 +405,7 @@ class _FeedBody extends StatelessWidget {
     required this.onReport,
     required this.onDelete,
     required this.onOffer,
+    required this.onViewOffer,
     required this.onBoost,
     required this.onMarkSold,
     required this.onAsk,
@@ -321,6 +419,7 @@ class _FeedBody extends StatelessWidget {
   final ValueChanged<Load> onReport;
   final ValueChanged<Load> onDelete;
   final ValueChanged<Load> onOffer;
+  final ValueChanged<Load> onViewOffer;
   final ValueChanged<Load> onBoost;
   final ValueChanged<Load> onMarkSold;
   final ValueChanged<Load> onAsk;
@@ -375,18 +474,34 @@ class _FeedBody extends StatelessWidget {
                 onReport: () => onReport(load),
                 onDelete: () => onDelete(load),
                 onOffer: () => onOffer(load),
+                onViewOffer: () => onViewOffer(load),
                 onAsk: () => onAsk(load),
                 onShare: () => onShare(load),
                 onDirectMessage: () => onDirectMessage(load),
-                onTap: () => context.push(AppRoutes.postDetail, extra: load),
+                onTap: () async {
+                  final r =
+                      await context.push(AppRoutes.postDetail, extra: load);
+                  if (!context.mounted) return;
+                  final cubit = context.read<FeedCubit>();
+                  if (r is Load) {
+                    cubit.replaceLoad(r);
+                  } else if (r == 'deleted') {
+                    cubit.removeLoad(load.id);
+                  }
+                },
                 onAuthorTap: load.author?.id == null
                     ? null
                     : () => context.push(AppRoutes.userProfile,
                         extra: load.author!.id),
                 onBoost: () => onBoost(load),
                 onMarkSold: () => onMarkSold(load),
-                onEditDeferred: () =>
-                    context.push(AppRoutes.createPost, extra: load),
+                onEditDeferred: () async {
+                  final updated = await context.push<Load>(
+                      AppRoutes.createPost, extra: load);
+                  if (updated != null && context.mounted) {
+                    context.read<FeedCubit>().replaceLoad(updated);
+                  }
+                },
               );
             },
           ),

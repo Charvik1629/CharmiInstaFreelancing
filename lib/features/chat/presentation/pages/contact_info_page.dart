@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/di/injection.dart';
-import '../widgets/full_image_view.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -147,7 +146,8 @@ class _Header extends StatelessWidget {
           AppAvatar(
               name: conversation.title,
               imageUrl: MediaUrl.resolve(conversation.avatarUrl),
-              size: 96),
+              size: 96,
+              enlargeOnTap: true),
           const SizedBox(height: AppSpacing.md),
           Text(conversation.title,
               style: Theme.of(context).textTheme.titleLarge,

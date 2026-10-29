@@ -95,6 +95,7 @@ class ApiClient {
 
     String message = 'Something went wrong.';
     Map<String, List<String>>? fieldErrors;
+    Map<String, dynamic>? data;
 
     if (body is Map<String, dynamic>) {
       if (body['message'] is String) message = body['message'] as String;
@@ -111,8 +112,14 @@ class ApiClient {
           message = fieldErrors.values.first.first;
         }
       }
+      // Some errors (e.g. 409 duplicate offer) carry a `data` object that tells
+      // the client where to go — keep it for the repository layer.
+      if (body['data'] is Map<String, dynamic>) {
+        data = body['data'] as Map<String, dynamic>;
+      }
     }
 
-    return AppException(message, statusCode: status, fieldErrors: fieldErrors);
+    return AppException(message,
+        statusCode: status, fieldErrors: fieldErrors, data: data);
   }
 }

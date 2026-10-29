@@ -34,78 +34,101 @@ class _DirectoryView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nex = context.nexveero;
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.lg),
-          child: Container(
-            decoration: BoxDecoration(
-              color: nex.elevated,
-              borderRadius: BorderRadius.circular(AppRadius.full),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: Row(
-              children: [
-                Icon(Icons.search, size: 20, color: nex.iconInactive),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: TextField(
-                    onChanged: (v) =>
-                        context.read<BusinessDirectoryCubit>().onQueryChanged(v),
-                    // The pill container is the field's surface, so strip the
-                    // theme's fill + focus border (else a box-in-a-box).
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      hintText: 'Search products, tags, business…',
-                    ),
-                  ),
-                ),
-              ],
+      appBar: AppBar(title: const Text('Search')),
+      body: Column(
+        children: [
+          // Ditto of the Business-feed search block (design: rounded-12 field on
+          // the elevated surface, muted search icon + hint). Editable + focused.
+          const _SearchField(),
+          Expanded(
+            child: BlocBuilder<BusinessDirectoryCubit, BusinessDirectoryState>(
+              builder: (context, state) {
+                switch (state.status) {
+                  case BizDirStatus.initial:
+                  case BizDirStatus.loading:
+                    return const ListSkeleton();
+                  case BizDirStatus.error:
+                    return ErrorView(
+                      message:
+                          state.errorMessage ?? 'Could not load businesses',
+                      onRetry: () =>
+                          context.read<BusinessDirectoryCubit>().load(),
+                    );
+                  case BizDirStatus.gated:
+                    return const EmptyView(
+                      title: 'Business directory coming soon',
+                      subtitle:
+                          'A searchable directory of verified businesses '
+                          'arrives once the backend is ready.',
+                      icon: Icons.storefront_outlined,
+                    );
+                  case BizDirStatus.empty:
+                    return const EmptyView(
+                      title: 'No businesses found',
+                      subtitle: 'Try a different product, tag or city.',
+                      icon: Icons.storefront_outlined,
+                    );
+                  case BizDirStatus.loaded:
+                    return ListView.builder(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                      itemCount: state.businesses.length,
+                      itemBuilder: (context, i) =>
+                          _BusinessCard(business: state.businesses[i]),
+                    );
+                }
+              },
             ),
           ),
-        ),
+        ],
       ),
-      body: BlocBuilder<BusinessDirectoryCubit, BusinessDirectoryState>(
-        builder: (context, state) {
-          switch (state.status) {
-            case BizDirStatus.initial:
-            case BizDirStatus.loading:
-              return const ListSkeleton();
-            case BizDirStatus.error:
-              return ErrorView(
-                message: state.errorMessage ?? 'Could not load businesses',
-                onRetry: () => context.read<BusinessDirectoryCubit>().load(),
-              );
-            case BizDirStatus.gated:
-              return const EmptyView(
-                title: 'Business directory coming soon',
-                subtitle:
-                    'A searchable directory of verified businesses arrives once '
-                    'the backend is ready.',
-                icon: Icons.storefront_outlined,
-              );
-            case BizDirStatus.empty:
-              return const EmptyView(
-                title: 'No businesses found',
-                subtitle: 'Try a different product, tag or city.',
-                icon: Icons.storefront_outlined,
-              );
-            case BizDirStatus.loaded:
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                itemCount: state.businesses.length,
-                itemBuilder: (context, i) =>
-                    _BusinessCard(business: state.businesses[i]),
-              );
-          }
-        },
+    );
+  }
+}
+
+/// The search input, styled identically to the Business-feed `_SearchBar`
+/// (design source Lyra "Business Feed · search"): a rounded-12 field sitting on
+/// the elevated surface with a muted leading icon and hint. The container is the
+/// field's surface, so the theme fill + borders are stripped (no box-in-a-box).
+class _SearchField extends StatelessWidget {
+  const _SearchField();
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: nex.elevated,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 20, color: nex.iconInactive),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: TextField(
+                autofocus: true,
+                onChanged: (v) =>
+                    context.read<BusinessDirectoryCubit>().onQueryChanged(v),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'Search products, tags, business…',
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

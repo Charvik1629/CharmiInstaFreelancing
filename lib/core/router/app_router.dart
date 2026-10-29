@@ -22,6 +22,7 @@ import '../../features/chat/presentation/pages/manage_labels_page.dart';
 import '../../features/chat/presentation/pages/starred_messages_page.dart';
 import '../../features/feed/presentation/pages/create_post_page.dart';
 import '../../features/feed/presentation/pages/post_detail_page.dart';
+import '../../features/feed/presentation/pages/post_link_page.dart';
 import '../../core/models/load.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/offers/presentation/pages/offers_page.dart';
@@ -44,12 +45,15 @@ import '../../features/admin/presentation/pages/admin_packages_page.dart';
 import '../../features/admin/presentation/pages/admin_pricing_page.dart';
 import '../../features/groups/domain/entities/group.dart';
 import '../../features/groups/presentation/pages/groups_list_page.dart';
+import '../../features/groups/presentation/pages/create_group_page.dart';
 import '../../features/groups/presentation/pages/group_detail_page.dart';
 import '../../features/security/presentation/pages/security_page.dart';
 import '../../features/contacts/presentation/pages/contact_sync_page.dart';
 import '../../features/profile/presentation/pages/user_profile_page.dart';
+import '../../features/broadcasts/domain/broadcast_detail.dart';
 import '../../features/broadcasts/presentation/pages/create_broadcast_page.dart';
 import '../../features/broadcasts/presentation/pages/broadcast_detail_page.dart';
+import '../../features/broadcasts/presentation/pages/broadcasts_list_page.dart';
 import '../../features/orders/presentation/pages/orders_page.dart';
 import '../../features/orders/presentation/pages/create_order_page.dart';
 import '../../features/orders/presentation/pages/order_detail_page.dart';
@@ -113,6 +117,13 @@ class AppRouter {
         path: AppRoutes.postDetail,
         builder: (_, state) => PostDetailPage(load: state.extra as Load),
       ),
+      // Inbound shared post link: /p/{id} → fetch the post and show it in-app.
+      GoRoute(
+        path: '${AppRoutes.postLink}/:id',
+        builder: (_, state) => PostLinkPage(
+          id: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
       GoRoute(path: AppRoutes.editProfile, builder: (_, _) => const EditProfilePage()),
       GoRoute(path: AppRoutes.businessDetails, builder: (_, _) => const BusinessDetailsPage()),
       GoRoute(path: AppRoutes.businessProfile, builder: (_, _) => const BusinessProfilePage()),
@@ -160,10 +171,17 @@ class AppRouter {
       GoRoute(path: AppRoutes.adminReports, builder: (_, _) => const AdminReportsPage()),
       GoRoute(path: AppRoutes.adminBroadcastLimits, builder: (_, _) => const AdminBroadcastLimitsPage()),
       GoRoute(path: AppRoutes.adminBroadcastGroups, builder: (_, _) => const AdminBroadcastGroupsPage()),
-      GoRoute(path: AppRoutes.createBroadcastGroup, builder: (_, _) => const CreateBroadcastGroupPage()),
+      GoRoute(
+          path: AppRoutes.createBroadcastGroup,
+          builder: (_, state) =>
+              CreateBroadcastGroupPage(editing: state.extra as BroadcastDetail?)),
       GoRoute(path: AppRoutes.adminPackages, builder: (_, _) => const AdminPackagesPage()),
       GoRoute(path: AppRoutes.adminPricing, builder: (_, _) => const AdminPricingPage()),
       GoRoute(path: AppRoutes.groups, builder: (_, _) => const GroupsListPage()),
+      GoRoute(
+        path: AppRoutes.createGroup,
+        builder: (_, _) => const CreateGroupPage(),
+      ),
       GoRoute(
         path: AppRoutes.groupDetail,
         builder: (_, state) => GroupDetailPage(group: state.extra as Group),
@@ -173,6 +191,10 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.userProfile,
         builder: (_, state) => UserProfilePage(userId: state.extra as int),
+      ),
+      GoRoute(
+        path: AppRoutes.broadcastsList,
+        builder: (_, _) => const BroadcastsListPage(),
       ),
       GoRoute(
         path: AppRoutes.createBroadcast,

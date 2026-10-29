@@ -5,6 +5,7 @@ enum CreateStatus { idle, submitting, success, failure }
 class CreateBroadcastState extends Equatable {
   const CreateBroadcastState({
     this.name = '',
+    this.description = '',
     this.results = const [],
     this.selected = const [],
     this.searching = false,
@@ -15,6 +16,7 @@ class CreateBroadcastState extends Equatable {
   });
 
   final String name;
+  final String description;
   final List<User> results;
   final List<User> selected;
   final bool searching;
@@ -27,11 +29,14 @@ class CreateBroadcastState extends Equatable {
   final BroadcastDetail? created;
 
   bool get isSubmitting => status == CreateStatus.submitting;
-  bool get canSubmit =>
-      name.trim().isNotEmpty && selected.isNotEmpty && !isSubmitting;
+
+  /// Members are optional at creation (they can be added later), so the group
+  /// only needs a name before it can be created.
+  bool get canSubmit => name.trim().isNotEmpty && !isSubmitting;
 
   CreateBroadcastState copyWith({
     String? name,
+    String? description,
     List<User>? results,
     List<User>? selected,
     bool? searching,
@@ -43,6 +48,7 @@ class CreateBroadcastState extends Equatable {
   }) {
     return CreateBroadcastState(
       name: name ?? this.name,
+      description: description ?? this.description,
       results: results ?? this.results,
       selected: selected ?? this.selected,
       searching: searching ?? this.searching,
@@ -56,6 +62,7 @@ class CreateBroadcastState extends Equatable {
   @override
   List<Object?> get props => [
         name,
+        description,
         results,
         selected,
         searching,

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'app_environment.dart';
 
 /// Single source of truth for environment-dependent configuration.
@@ -92,10 +94,15 @@ class AppConfig {
   /// Lets us point at the real backend (or a local mock) without editing code.
   static const String _envBaseUrl = String.fromEnvironment('BASE_URL');
 
-  /// The active config. Defaults to [dev]; if BASE_URL is provided at build
-  /// time it overrides the placeholder so the app talks to a real server.
-  static AppConfig current =
-      _envBaseUrl.isEmpty ? dev : dev.copyWith(baseUrl: _envBaseUrl);
+  /// The active config. Release builds use [prod] (logging OFF); debug/profile
+  /// builds use [dev] (logging ON). A `--dart-define=BASE_URL` still overrides
+  /// the base URL in either case, so the app can point at a real or mock server.
+  static AppConfig current = _resolve();
+
+  static AppConfig _resolve() {
+    final base = kReleaseMode ? prod : dev;
+    return _envBaseUrl.isEmpty ? base : base.copyWith(baseUrl: _envBaseUrl);
+  }
 
   /// Whether the base URL is still a placeholder. UI/logging can warn on this
   /// so a missing backend URL is obvious rather than a silent network failure.

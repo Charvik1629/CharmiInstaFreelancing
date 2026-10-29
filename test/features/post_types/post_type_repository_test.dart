@@ -44,7 +44,8 @@ void main() {
   });
 
   test('short-circuits with ConfigFailure when base URL is a placeholder', () async {
-    AppConfig.current = original; // placeholder dev config
+    AppConfig.current =
+        AppConfig.dev.copyWith(baseUrl: 'https://REPLACE_ME.example');
     final repo = PostTypeRepositoryImpl(_FakeDataSource(result: const []));
     final res = await repo.getPostTypes();
     expect(res.failureOrNull, isA<ConfigFailure>());

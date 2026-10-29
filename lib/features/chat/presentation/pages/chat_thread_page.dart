@@ -9,13 +9,13 @@ import '../../../../core/config/maps_config.dart';
 import '../../../../core/link_preview/link_preview_service.dart';
 import 'location_picker_page.dart';
 import 'location_view_page.dart';
-import '../widgets/full_image_view.dart';
 import '../widgets/link_preview_card.dart';
 import '../widgets/send_inquiry_sheet.dart';
 import '../widgets/voice_bubble.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
+import '../../../../core/push/push_service.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/permissions/app_permission.dart';
 import '../../../../core/permissions/permission_flow.dart';
@@ -27,6 +27,7 @@ import '../../../../core/widgets/widgets.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../groups/domain/repositories/groups_repository.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../domain/entities/chat_label.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/repositories/chat_repository.dart';
@@ -67,9 +68,15 @@ class _ThreadViewState extends State<_ThreadView> {
   final _scroll = ScrollController();
   final _picker = ImagePicker();
 
+  /// Labels applied to this chat, kept locally so the app-bar dot and the
+  /// Labels/Remove-label action update immediately after a change here.
+  late List<ChatLabel> _labels = widget.conversation.labels;
+
   @override
   void initState() {
     super.initState();
+    // Suppress foreground push banners for the thread being viewed.
+    PushService.setActiveConversation(widget.conversation.id);
     _scroll.addListener(() {
       // The list is reversed (newest at the bottom), so older messages page in
       // when scrolled up toward the top — i.e. near the max scroll extent.
@@ -82,6 +89,9 @@ class _ThreadViewState extends State<_ThreadView> {
 
   @override
   void dispose() {
+    if (PushService.activeConversationId == widget.conversation.id) {
+      PushService.setActiveConversation(null);
+    }
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -414,6 +424,50 @@ class _ThreadViewState extends State<_ThreadView> {
     }
   }
 
+  /// Attach/detach labels on this chat from the thread (so labels can be
+  /// managed from the chat detail, not only the chat list). With labels already
+  /// applied this is "Remove label" — clears them directly, no picker.
+  Future<void> _manageLabels(BuildContext context, Conversation c) async {
+    final repo = sl<ChatRepository>();
+
+    // Already labelled → remove directly (no checkbox sheet).
+    if (_labels.isNotEmpty) {
+      final toRemove = List<ChatLabel>.from(_labels);
+      var ok = true;
+      for (final l in toRemove) {
+        final r = await AppLoader.run(repo.detachLabel(c.id, l.id));
+        if (!r.isSuccess) ok = false;
+      }
+      if (!context.mounted) return;
+      if (ok) setState(() => _labels = const []);
+      AppOverlays.snack(context, ok ? 'Label removed' : 'Could not remove label');
+      return;
+    }
+
+    final result = await AppLoader.run(repo.getLabels());
+    if (!context.mounted) return;
+    if (result case Err(failure: final f)) {
+      AppOverlays.snack(context, f.message);
+      return;
+    }
+    final labels = (result as Success<List<ChatLabel>>).value;
+    if (labels.isEmpty) {
+      AppOverlays.snack(context, 'Create a label first (Chats → label icon).');
+      return;
+    }
+    final updated = await AppOverlays.sheet<List<ChatLabel>>(
+      context,
+      builder: (_) => _ThreadLabelSheet(
+        conversation: c,
+        labels: labels,
+        attached: _labels,
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() => _labels = updated);
+    }
+  }
+
   /// Fetches the group by id and opens its Group details screen.
   Future<void> _openGroupInfo(BuildContext context, int groupId) async {
     final result = await AppLoader.run(sl<GroupsRepository>().getGroup(groupId));
@@ -443,17 +497,40 @@ class _ThreadViewState extends State<_ThreadView> {
               : () => context.push(AppRoutes.contactInfo, extra: c),
           child: Row(
           children: [
-            AppAvatar(name: c.title, imageUrl: MediaUrl.resolve(c.avatarUrl), size: 36),
+            AppAvatar(
+                name: c.title,
+                imageUrl: MediaUrl.resolve(c.avatarUrl),
+                size: 36,
+                enlargeOnTap: true),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(c.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(c.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium),
+                      ),
+                      // A colored dot per applied label.
+                      for (final l in _labels) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: l.colorValue(
+                                Theme.of(context).colorScheme.primary),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   // Live subtitle: typing… › Online › last seen › static label.
                   BlocBuilder<ConversationCubit, ConversationState>(
                     buildWhen: (p, c) =>
@@ -500,6 +577,14 @@ class _ThreadViewState extends State<_ThreadView> {
               tooltip: 'View post',
               onPressed: () => _viewPost(context, c.loadId!),
             ),
+          if (!c.isBroadcast)
+            IconButton(
+              icon: Icon(_labels.isEmpty
+                  ? Icons.label_outline
+                  : Icons.label_off_outlined),
+              tooltip: _labels.isEmpty ? 'Manage labels' : 'Remove label',
+              onPressed: () => _manageLabels(context, c),
+            ),
           if (c.type == ConversationType.direct)
             IconButton(
               icon: const Icon(Icons.info_outline),
@@ -514,8 +599,22 @@ class _ThreadViewState extends State<_ThreadView> {
             ),
         ],
       ),
-      body: Column(
+      body: Container(
+        // WhatsApp-style doodle background behind the thread (per theme).
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(
+              Theme.of(context).brightness == Brightness.dark
+                  ? 'assets/chat/chat_bg_dark.jpg'
+                  : 'assets/chat/chat_bg_light.jpg',
+            ),
+            fit: BoxFit.cover,
+            repeat: ImageRepeat.repeat,
+          ),
+        ),
+        child: Column(
         children: [
+          if (c.isBroadcast) const _BroadcastNotice(),
           Expanded(
             child: BlocBuilder<ConversationCubit, ConversationState>(
               builder: (context, state) {
@@ -596,6 +695,7 @@ class _ThreadViewState extends State<_ThreadView> {
             onVoice: _voiceComingSoon,
           ),
         ],
+        ),
       ),
     );
   }
@@ -630,8 +730,9 @@ class _Bubble extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 3),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        gradient: mine ? context.nexveero.primaryGradient : null,
-        color: mine ? null : context.nexveero.elevated,
+        // Soft solid purple for my bubbles — calmer than the brand gradient and
+        // easier on the eyes over the chat background (works in light + dark).
+        color: mine ? const Color(0xFF6B5FD6) : context.nexveero.elevated,
         borderRadius: radius,
       ),
       child: Column(
@@ -677,11 +778,14 @@ class _Bubble extends StatelessWidget {
           // Inquiry card (type: inquiry) — question + optional price.
           else if (message.isInquiry)
             _InquiryCard(message: message, mine: mine)
+          // Offer message — remarks + price, in its own distinct style.
+          else if (message.isOffer)
+            _OfferCard(message: message, mine: mine)
           else if ((message.body ?? '').isNotEmpty)
             Text(message.body!,
                 style: TextStyle(color: mine ? Colors.white : null)),
           if (LinkPreviewService.firstUrl(message.body) case final url?
-              when !message.isInquiry)
+              when !message.isInquiry && !message.isOffer)
             LinkPreviewCard(url: url, mine: mine),
           const SizedBox(height: 2),
           Row(
@@ -694,7 +798,7 @@ class _Bubble extends StatelessWidget {
                 const SizedBox(width: 3),
               ],
               Text(
-                message.createdAt?.timeAgo ?? '',
+                message.createdAt?.clockTime ?? '',
                 style: TextStyle(
                     fontSize: 10,
                     color:
@@ -702,9 +806,11 @@ class _Bubble extends StatelessWidget {
               ),
               if (mine) ...[
                 const SizedBox(width: 3),
-                Icon(readByPeer ? Icons.done_all : Icons.done,
+                // Delivered = grey double-tick; read = blue double-tick.
+                Icon(Icons.done_all,
                     size: 13,
-                    color: readByPeer ? Colors.white : Colors.white70),
+                    color:
+                        readByPeer ? const Color(0xFF4FC3F7) : Colors.white70),
               ],
             ],
           ),
@@ -884,6 +990,77 @@ class _InquiryCard extends StatelessWidget {
   }
 }
 
+/// An offer message rendered in its own distinct style — mirrors the design's
+/// highlighted Inquiry bubble (accent header + body + price chip) but labelled
+/// "OFFER" with the local_offer glyph. The server sends offers as a text
+/// message (remarks + an "Offer price:" line), so [message] is split into
+/// remarks and a formatted price via [ChatMessage.offerRemarks] / offerPrice.
+class _OfferCard extends StatelessWidget {
+  const _OfferCard({required this.message, required this.mine});
+  final ChatMessage message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final accent = mine ? Colors.white : primary;
+    final remarks = message.offerRemarks;
+    final price = message.offerPrice;
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 4),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: mine
+            ? Colors.white.withValues(alpha: 0.14)
+            : primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: accent.withValues(alpha: mine ? 0.4 : 0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.local_offer, size: 13, color: accent),
+              const SizedBox(width: 5),
+              Text('OFFER',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: accent)),
+            ],
+          ),
+          if (remarks != null) ...[
+            const SizedBox(height: 6),
+            Text(remarks, style: TextStyle(color: mine ? Colors.white : null)),
+          ],
+          if ((price ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: mine
+                    ? Colors.white.withValues(alpha: 0.22)
+                    : primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text('₹ $price',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: mine ? Colors.white : primary)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// A shared-location bubble (WhatsApp-style): a static map thumbnail with the
 /// place label below; tapping opens the full in-app map screen.
 class _LocationCard extends StatelessWidget {
@@ -1047,6 +1224,50 @@ class _Composer extends StatelessWidget {
   final VoidCallback onAttach;
   final VoidCallback onVoice;
 
+  /// Canned one-tap replies for quick trade chat.
+  static const _quickReplies = [
+    'Okay',
+    'OK Done',
+    'No',
+    'Not Available',
+    'Right',
+    'Final Price',
+  ];
+
+  /// Opens a sheet of quick replies; tapping one drops it into the field so the
+  /// user can tweak before sending.
+  void _showQuickReplies(BuildContext context) {
+    AppOverlays.sheet<void>(
+      context,
+      builder: (sheetCtx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Quick replies',
+              style: Theme.of(sheetCtx).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final r in _quickReplies)
+                ActionChip(
+                  label: Text(r),
+                  onPressed: () {
+                    final existing = controller.text.trimRight();
+                    controller.text = existing.isEmpty ? r : '$existing $r';
+                    controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: controller.text.length));
+                    Navigator.of(sheetCtx).pop();
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!conversation.canChat) {
@@ -1103,7 +1324,7 @@ class _Composer extends StatelessWidget {
                           isDense: true,
                           filled: false,
                           hintText: conversation.isBroadcast
-                              ? 'Message all recipients…'
+                              ? 'Broadcast message…'
                               : 'Message…',
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
@@ -1112,7 +1333,15 @@ class _Composer extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Icon(fieldIcon, size: 20, color: context.nexveero.textSecondary),
+                    InkWell(
+                      onTap: () => _showQuickReplies(context),
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(fieldIcon,
+                            size: 20, color: context.nexveero.textSecondary),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1217,6 +1446,133 @@ class _DateSeparator extends StatelessWidget {
 }
 
 /// A server event line ("X requested load …", "Y made an offer …").
+/// Info banner at the top of a broadcast thread (design: "Messages are
+/// delivered individually to each recipient. Replies come in private chats.").
+class _BroadcastNotice extends StatelessWidget {
+  const _BroadcastNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final nex = context.nexveero;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+      color: nex.gradientStart.withValues(alpha: 0.10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.campaign_outlined,
+              size: 16, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Messages are delivered individually to each recipient. '
+              'Replies come in private chats.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: nex.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Attach/detach labels on a conversation from the chat thread. Hits
+/// attach/detach on [ChatRepository] directly and tracks the attached set
+/// locally so the checkboxes update without a full reload.
+class _ThreadLabelSheet extends StatefulWidget {
+  const _ThreadLabelSheet({
+    required this.conversation,
+    required this.labels,
+    required this.attached,
+  });
+
+  final Conversation conversation;
+  final List<ChatLabel> labels;
+  final List<ChatLabel> attached;
+
+  @override
+  State<_ThreadLabelSheet> createState() => _ThreadLabelSheetState();
+}
+
+class _ThreadLabelSheetState extends State<_ThreadLabelSheet> {
+  late final Set<int> _attached = {for (final l in widget.attached) l.id};
+  int? _busyId;
+
+  Future<void> _toggle(ChatLabel l) async {
+    final repo = sl<ChatRepository>();
+    final attaching = !_attached.contains(l.id);
+    setState(() => _busyId = l.id);
+    final result = attaching
+        ? await repo.attachLabel(widget.conversation.id, l.id)
+        : await repo.detachLabel(widget.conversation.id, l.id);
+    if (!mounted) return;
+    if (result.isSuccess) {
+      // Label applied/removed — close the sheet, returning the new label set.
+      final ids = Set<int>.from(_attached);
+      if (attaching) {
+        ids.add(l.id);
+      } else {
+        ids.remove(l.id);
+      }
+      final updated =
+          widget.labels.where((x) => ids.contains(x.id)).toList();
+      Navigator.of(context).pop(updated);
+      return;
+    }
+    setState(() => _busyId = null);
+    AppOverlays.snack(
+        context, result.failureOrNull?.message ?? 'Could not update label');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Labels for ${widget.conversation.title}',
+            style: Theme.of(context).textTheme.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
+        const SizedBox(height: AppSpacing.sm),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                for (final l in widget.labels)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    secondary: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: l.colorValue(
+                            Theme.of(context).colorScheme.primary),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    title: Text(l.name),
+                    value: _attached.contains(l.id),
+                    onChanged: _busyId != null ? null : (_) => _toggle(l),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SystemLine extends StatelessWidget {
   const _SystemLine({required this.text});
   final String text;

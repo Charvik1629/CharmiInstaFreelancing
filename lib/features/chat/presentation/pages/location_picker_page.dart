@@ -65,19 +65,25 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   Future<void> _autocomplete(String q) async {
     try {
-      final res = await _dio.get(
-        'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-        queryParameters: {'input': q, 'key': MapsConfig.apiKey},
+      // Places API (New): POST places:autocomplete with the key in a header.
+      final res = await _dio.post(
+        'https://places.googleapis.com/v1/places:autocomplete',
+        options: Options(headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': MapsConfig.apiKey,
+        }),
+        data: {'input': q},
       );
-      final list = (res.data?['predictions'] as List?) ?? const [];
+      final list = (res.data?['suggestions'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
         _predictions = [
-          for (final p in list)
-            if (p is Map)
+          for (final s in list)
+            if (s is Map && s['placePrediction'] is Map)
               (
-                description: '${p['description']}',
-                placeId: '${p['place_id']}',
+                description:
+                    '${(s['placePrediction']['text'] as Map?)?['text'] ?? ''}',
+                placeId: '${s['placePrediction']['placeId'] ?? ''}',
               ),
         ];
       });
@@ -94,18 +100,18 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       _pickedLabel = p.description;
     });
     try {
+      // Places API (New): GET places/{id} with a `location` field mask.
       final res = await _dio.get(
-        'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: {
-          'place_id': p.placeId,
-          'fields': 'geometry',
-          'key': MapsConfig.apiKey,
-        },
+        'https://places.googleapis.com/v1/places/${p.placeId}',
+        options: Options(headers: {
+          'X-Goog-Api-Key': MapsConfig.apiKey,
+          'X-Goog-FieldMask': 'location',
+        }),
       );
-      final loc = res.data?['result']?['geometry']?['location'];
+      final loc = res.data?['location'];
       if (loc == null || !mounted) return;
-      final target = LatLng((loc['lat'] as num).toDouble(),
-          (loc['lng'] as num).toDouble());
+      final target = LatLng((loc['latitude'] as num).toDouble(),
+          (loc['longitude'] as num).toDouble());
       setState(() => _center = target);
       _controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
     } catch (_) {
@@ -113,33 +119,66 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     }
   }
 
+  /// Ensures location permission, prompting the OS dialog when undecided.
+  Future<bool> _ensurePermission() async {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    return perm == LocationPermission.whileInUse ||
+        perm == LocationPermission.always;
+  }
+
   Future<Position?> _current() async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return null;
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-      }
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
+      // Ask permission first (so the app prompts on open), then the live fix.
+      if (!await _ensurePermission()) return null;
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) {
+          AppOverlays.snack(context, 'Turn on location to use your current spot.');
+        }
         return null;
       }
-      return await Geolocator.getCurrentPosition();
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
     } catch (_) {
       return null;
     }
   }
 
+  Future<Position?> _lastKnown() async {
+    try {
+      if (!await _ensurePermission()) return null;
+      return await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _moveTo(Position pos) {
+    final target = LatLng(pos.latitude, pos.longitude);
+    setState(() {
+      _center = target;
+      _ready = true;
+    });
+    _controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+  }
+
   Future<void> _goToCurrent({bool initial = false}) async {
+    // On open, center instantly on the last cached fix, then refine with a
+    // fresh one, so the pin starts on (or near) the user's current place.
+    if (initial) {
+      final last = await _lastKnown();
+      if (last != null && mounted) _moveTo(last);
+    }
     final pos = await _current();
     if (!mounted) return;
     if (pos != null) {
-      final target = LatLng(pos.latitude, pos.longitude);
-      setState(() {
-        _center = target;
-        _ready = true;
-      });
-      _controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      _moveTo(pos);
     } else if (initial) {
       setState(() => _ready = true);
     }

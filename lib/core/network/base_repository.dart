@@ -32,6 +32,9 @@ mixin BaseRepository {
         return ForbiddenFailure(e.message);
       case 404:
         return NotFoundFailure(e.message);
+      case 409:
+        return ConflictFailure(e.message,
+            conversationId: _asInt(e.data?['conversation_id']));
       case 422:
         return ValidationFailure(e.message, fieldErrors: e.fieldErrors);
       case null:
@@ -44,4 +47,8 @@ mixin BaseRepository {
         return UnknownFailure(e.message);
     }
   }
+
+  static int? _asInt(Object? v) => v is int
+      ? v
+      : (v is num ? v.toInt() : int.tryParse('${v ?? ''}'));
 }

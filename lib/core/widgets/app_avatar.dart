@@ -2,9 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'full_image_view.dart';
 
 /// Circular avatar. Shows the network image when [imageUrl] is set, otherwise a
 /// gradient monogram from [name]'s initials. Optional story-ring border.
+///
+/// With [enlargeOnTap], tapping an avatar that has a photo opens it full-screen
+/// with pinch-to-zoom (a DP can be viewed large).
 class AppAvatar extends StatelessWidget {
   const AppAvatar({
     super.key,
@@ -12,12 +16,14 @@ class AppAvatar extends StatelessWidget {
     required this.name,
     this.size = 40,
     this.ring = false,
+    this.enlargeOnTap = false,
   });
 
   final String? imageUrl;
   final String name;
   final double size;
   final bool ring;
+  final bool enlargeOnTap;
 
   String get _initials {
     final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
@@ -50,22 +56,33 @@ class AppAvatar extends StatelessWidget {
           : _monogram(context),
     );
 
-    if (!ring) return avatar;
-    return Container(
-      padding: const EdgeInsets.all(2.5),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: nexveero.primaryGradient,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(2),
+    if (ring) {
+      avatar = Container(
+        padding: const EdgeInsets.all(2.5),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Theme.of(context).scaffoldBackgroundColor,
+          gradient: nexveero.primaryGradient,
         ),
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Theme.of(context).scaffoldBackgroundColor,
+          ),
+          child: avatar,
+        ),
+      );
+    }
+
+    if (enlargeOnTap && hasImage) {
+      return GestureDetector(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => FullImageView(url: imageUrl!),
+        )),
         child: avatar,
-      ),
-    );
+      );
+    }
+    return avatar;
   }
 
   Widget _monogram(BuildContext context) => Text(

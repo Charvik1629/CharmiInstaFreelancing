@@ -18,7 +18,8 @@ void main() {
   tearDown(() => AppConfig.current = original);
 
   test('returns ConfigFailure when base URL is a placeholder', () async {
-    AppConfig.current = original; // dev placeholder
+    AppConfig.current =
+        AppConfig.dev.copyWith(baseUrl: 'https://REPLACE_ME.example');
     final r = await repo.guard(() async => 1);
     expect(r.failureOrNull, isA<ConfigFailure>());
   });
