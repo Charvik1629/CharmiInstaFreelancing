@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/permissions/app_permission.dart';
 import '../../../../core/permissions/permission_flow.dart';
-import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
-import '../../../chat/domain/entities/conversation.dart';
-import '../../../chat/domain/repositories/chat_repository.dart';
+import '../../../chat/presentation/utils/chat_start_helper.dart';
 import '../cubit/contact_sync_cubit.dart';
 
 /// Find friends / Contact sync (Module 8). Reads the device address book (behind
@@ -154,15 +150,12 @@ class _ContactRow extends StatelessWidget {
   /// Opens (or reopens) a 1:1 chat with a contact already on Nexveero.
   Future<void> _message(BuildContext context) async {
     final user = entry.user!;
-    final repo = sl<ChatRepository>();
-    final result = await AppLoader.run(repo.startChat(user.id));
-    if (!context.mounted) return;
-    switch (result) {
-      case Success(value: final Conversation conversation):
-        context.push(AppRoutes.chatThread, extra: conversation);
-      case Err(failure: final f):
-        AppOverlays.snack(context, f.message);
-    }
+    await startChatWithPinCheck(
+      context,
+      userId: user.id,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    );
   }
 
   /// Invites a contact not yet on Nexveero (share sheet with the app link).

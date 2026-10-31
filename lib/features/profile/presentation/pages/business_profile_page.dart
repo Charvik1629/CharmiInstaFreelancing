@@ -12,9 +12,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
-import '../../../chat/domain/repositories/chat_repository.dart';
+import '../../../chat/presentation/utils/chat_start_helper.dart';
 import '../cubit/business_profile_cubit.dart';
 
 /// Business Profile (design "Business Profile"): a gradient cover with back +
@@ -242,15 +241,12 @@ class _Body extends StatelessWidget {
 
   /// Opens (or reopens) a 1:1 chat with this business via `POST /chats`.
   Future<void> _startChat(BuildContext context, User user) async {
-    final repo = sl<ChatRepository>();
-    final result = await AppLoader.run(repo.startChat(user.id));
-    if (!context.mounted) return;
-    switch (result) {
-      case Success(value: final conversation):
-        context.push(AppRoutes.chatThread, extra: conversation);
-      case Err(failure: final f):
-        AppOverlays.snack(context, f.message);
-    }
+    await startChatWithPinCheck(
+      context,
+      userId: user.id,
+      name: user.businessName ?? user.name,
+      avatarUrl: user.avatarUrl,
+    );
   }
 }
 

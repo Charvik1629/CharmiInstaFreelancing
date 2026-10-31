@@ -6,7 +6,6 @@ import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
-import '../../../../core/utils/result.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
@@ -14,6 +13,7 @@ import '../../../../core/widgets/widgets.dart';
 import '../../domain/entities/chat_label.dart';
 import '../../domain/entities/conversation.dart';
 import '../cubit/chat_list_cubit.dart';
+import '../utils/chat_start_helper.dart';
 
 /// The Chats inbox (design section 05). One list for all three chat kinds —
 /// direct, group and broadcast — with filter chips to narrow it.
@@ -252,16 +252,17 @@ class _PeopleRow extends StatelessWidget {
 
   Future<void> _open(BuildContext context) async {
     final cubit = context.read<ChatListCubit>();
-    final result = await AppLoader.run(cubit.startChat(user.id));
-    if (!context.mounted) return;
-    switch (result) {
-      case Success(value: final conv):
+    await startChatWithPinCheck(
+      context,
+      userId: user.id,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      onSuccess: (conv) async {
         await context.push(AppRoutes.chatThread, extra: conv);
         // Back from the chat → reset the inbox to the plain list.
         if (context.mounted) cubit.clearSearch();
-      case Err(failure: final f):
-        AppOverlays.snack(context, f.message);
-    }
+      },
+    );
   }
 
   @override

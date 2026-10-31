@@ -8,9 +8,8 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
-import '../../../chat/domain/repositories/chat_repository.dart';
+import '../../../chat/presentation/utils/chat_start_helper.dart';
 import '../cubit/search_cubit.dart';
 
 /// People search (design "Search"): a search field, a RECENT list when empty,
@@ -296,27 +295,11 @@ class _UserRow extends StatelessWidget {
   /// Starts (or reopens) a 1:1 chat. If the peer has Set-PIN on, prompts for
   /// their 4-digit PIN first, then opens the thread.
   Future<void> _startChat(BuildContext context, User user) async {
-    final repo = sl<ChatRepository>();
-    final pinReq = await AppLoader.run(repo.chatPinRequired(user.id));
-    if (!context.mounted) return;
-
-    String? pin;
-    if (pinReq.valueOrNull == true) {
-      // Full-screen "Enter PIN to chat" (design HTML 2933).
-      pin = await context.push<String>(
-        AppRoutes.enterPin,
-        extra: {'name': user.name, 'avatar': user.avatarUrl},
-      );
-      if (pin == null) return; // cancelled
-    }
-
-    final result = await AppLoader.run(repo.startChat(user.id, pin: pin));
-    if (!context.mounted) return;
-    switch (result) {
-      case Success(value: final conversation):
-        context.push(AppRoutes.chatThread, extra: conversation);
-      case Err(failure: final f):
-        AppOverlays.snack(context, f.message);
-    }
+    await startChatWithPinCheck(
+      context,
+      userId: user.id,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    );
   }
 }

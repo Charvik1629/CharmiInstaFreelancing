@@ -1314,10 +1314,10 @@ class _Composer extends StatelessWidget {
                         controller: controller,
                         minLines: 1,
                         maxLines: 4,
-                        textInputAction: TextInputAction.send,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
                         onChanged: (_) =>
                             context.read<ConversationCubit>().notifyTyping(),
-                        onSubmitted: (_) => onSend(),
                         // The pill container is the field's surface, so strip
                         // the theme's fill + focus border (else a box-in-a-box).
                         decoration: InputDecoration(
