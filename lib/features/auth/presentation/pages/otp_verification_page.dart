@@ -68,8 +68,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   Future<void> _verify() async {
     if (_submitting || !_complete) return;
     setState(() => _submitting = true);
-    final result = await sl<AuthRepository>()
-        .verifyOtp(identifier: widget.destination ?? '', code: _code);
+    final result = await sl<AuthRepository>().verifyOtp(
+      identifier: widget.destination ?? '',
+      code: _code,
+    );
     if (!mounted) return;
     setState(() => _submitting = false);
     switch (result) {
@@ -84,7 +86,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     _startCountdown();
     final result = await sl<AuthRepository>().sendOtp(widget.destination ?? '');
     if (!mounted) return;
-    if (result case Err(failure: final f)) AppOverlays.snack(context, f.message);
+    if (result case Err(failure: final f)) {
+      AppOverlays.snack(context, f.message);
+    }
   }
 
   @override
@@ -120,19 +124,19 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   borderRadius: BorderRadius.circular(AppRadius.xl),
                 ),
                 child: Icon(
-                    isEmail
-                        ? Icons.mark_email_read
-                        : Icons.smartphone,
-                    color: context.nexveero.gradientStart,
-                    size: 36),
+                  isEmail ? Icons.mark_email_read : Icons.smartphone,
+                  color: context.nexveero.gradientStart,
+                  size: 36,
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
               Text("Verify it's you", style: texts.displayLarge),
               const SizedBox(height: AppSpacing.xs),
               Text.rich(
                 TextSpan(
-                  style: texts.bodyLarge
-                      ?.copyWith(color: context.nexveero.textSecondary),
+                  style: texts.bodyLarge?.copyWith(
+                    color: context.nexveero.textSecondary,
+                  ),
                   children: [
                     const TextSpan(text: 'Enter the 6-digit code sent to\n'),
                     TextSpan(
@@ -149,30 +153,41 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  for (var i = 0; i < _length; i++) _OtpBox(
-                    controller: _controllers[i],
-                    focusNode: _focusNodes[i],
-                    onChanged: (v) => _onChanged(i, v),
-                  ),
+                  for (var i = 0; i < _length; i++)
+                    _OtpBox(
+                      controller: _controllers[i],
+                      focusNode: _focusNodes[i],
+                      onChanged: (v) => _onChanged(i, v),
+                    ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
               Center(
                 child: _secondsLeft > 0
-                    ? Text('Resend code in 0:${_secondsLeft.toString().padLeft(2, '0')}',
-                        style: texts.bodyMedium?.copyWith(color: context.nexveero.textSecondary))
-                    : TextButton(onPressed: _resend, child: const Text('Resend code')),
+                    ? Text(
+                        'Resend code in 0:${_secondsLeft.toString().padLeft(2, '0')}',
+                        style: texts.bodyMedium?.copyWith(
+                          color: context.nexveero.textSecondary,
+                        ),
+                      )
+                    : TextButton(
+                        onPressed: _resend,
+                        child: const Text('Resend code'),
+                      ),
               ),
               const SizedBox(height: AppSpacing.lg),
               AppButton(
-                  label: 'Verify',
-                  isLoading: _submitting,
-                  onPressed: _complete ? _verify : null),
+                label: 'Verify',
+                isLoading: _submitting,
+                onPressed: _complete ? _verify : null,
+              ),
               const SizedBox(height: AppSpacing.md),
               Center(
                 child: TextButton(
                   onPressed: () {
-                    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
                   },
                   child: Text(isEmail ? 'Change email' : 'Change mobile'),
                 ),
@@ -219,11 +234,11 @@ class _StepIndicator extends StatelessWidget {
           dot(1),
           dot(2),
           const SizedBox(width: 8),
-          Text('Step ${step + 1} of 3 · ${channel == OtpChannel.email ? 'Email' : 'Mobile'}',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: nex.textSecondary)),
+          Text(
+            'Step ${step + 1} of 3 · ${channel == OtpChannel.email ? 'Email' : 'Mobile'}',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: nex.textSecondary),
+          ),
         ],
       ),
     );
@@ -231,7 +246,11 @@ class _StepIndicator extends StatelessWidget {
 }
 
 class _OtpBox extends StatelessWidget {
-  const _OtpBox({required this.controller, required this.focusNode, required this.onChanged});
+  const _OtpBox({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+  });
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;

@@ -78,17 +78,14 @@ class _SplashPageState extends State<SplashPage>
                   const SizedBox(height: AppSpacing.xl),
                   Text(
                     AppConstants.appName,
-                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          color: Colors.white,
-                          letterSpacing: 1,
-                        ),
+                    style: Theme.of(context).textTheme.displayLarge
+                        ?.copyWith(color: Colors.white, letterSpacing: 1),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'where creators & community connect',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: Colors.white.withValues(alpha: 0.85)),
                   ),
                 ],
               ),

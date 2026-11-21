@@ -25,6 +25,37 @@ class RealtimeMessage {
   final bool isBroadcast;
 }
 
+/// Mutations carry server snapshots; unlike message:new they never append rows.
+class ChatChangeEvent {
+  const ChatChangeEvent({
+    required this.kind,
+    required this.conversationId,
+    required this.data,
+  });
+  final String kind;
+  final int conversationId;
+  final Map<String, dynamic> data;
+  int? get messageId =>
+      (data['message_id'] as num?)?.toInt() ?? (data['id'] as num?)?.toInt();
+  static ChatChangeEvent? fromPayload(String kind, Object? payload) {
+    if (payload is! Map) return null;
+    final outer = Map<String, dynamic>.from(payload);
+    final raw = outer['message'] ?? outer['data'];
+    final inner = raw is Map ? Map<String, dynamic>.from(raw) : outer;
+    final conversation = inner['conversation'];
+    final id =
+        outer['conversation_id'] ??
+        inner['conversation_id'] ??
+        (conversation is Map
+            ? conversation['conversation_id'] ?? conversation['id']
+            : null) ??
+        (kind.startsWith('conversation:') ? inner['id'] : null);
+    final parsedId = id is num ? id.toInt() : int.tryParse('$id');
+    if (parsedId == null) return null;
+    return ChatChangeEvent(kind: kind, conversationId: parsedId, data: inner);
+  }
+}
+
 /// Peer typing state pushed over the socket (`typing:update`).
 class TypingEvent {
   const TypingEvent({
@@ -109,6 +140,8 @@ class SocketService {
   Timer? _pingTimer;
 
   final _messages = StreamController<RealtimeMessage>.broadcast();
+  final _chatChanges = StreamController<ChatChangeEvent>.broadcast();
+  Stream<ChatChangeEvent> get chatChanges => _chatChanges.stream;
   final _conversationCreated = StreamController<void>.broadcast();
   final _typingEvents = StreamController<TypingEvent>.broadcast();
   final _readEvents = StreamController<ReadEvent>.broadcast();
@@ -166,13 +199,16 @@ class SocketService {
   Future<void> connect() async {
     if (_socket != null) return;
     try {
-      final res =
-          await _client.get<Map<String, dynamic>>(ApiEndpoints.realtimeConfig);
+      final res = await _client.get<Map<String, dynamic>>(
+        ApiEndpoints.realtimeConfig,
+      );
       final data = res.data?['data'];
       final rawUrl = data is Map ? data['socket_url'] as String? : null;
       final token = await _storage.readSecure(StorageKeys.authToken);
       if (rawUrl == null || rawUrl.isEmpty || token == null) {
-        _log('✗ no socket_url/token — realtime disabled, falling back to polling');
+        _log(
+          '✗ no socket_url/token — realtime disabled, falling back to polling',
+        );
         return;
       }
       // The backend often reports a loopback socket_url (e.g.
@@ -215,6 +251,19 @@ class SocketService {
       socket.onConnectError((e) => _log('✗ connect error: $e'));
       socket.onError((e) => _log('✗ error: $e'));
       socket.on('message:new', _onMessage);
+      for (final kind in [
+        'message:updated',
+        'message:deleted',
+        'message:hidden',
+        'message:reaction',
+        'conversation:updated',
+        'conversation:deleted',
+      ]) {
+        socket.on(kind, (data) {
+          final event = ChatChangeEvent.fromPayload(kind, data);
+          if (event != null && !_chatChanges.isClosed) _chatChanges.add(event);
+        });
+      }
       socket.on('unread:update', _onUnread);
       socket.on('conversation:created', _onConversationCreated);
       socket.on('typing:update', _onTyping);
@@ -245,7 +294,8 @@ class SocketService {
     try {
       final u = Uri.parse(raw);
       final host = u.host.toLowerCase();
-      final isLoopback = host.isEmpty ||
+      final isLoopback =
+          host.isEmpty ||
           host == 'localhost' ||
           host == '127.0.0.1' ||
           host == '0.0.0.0';
@@ -283,8 +333,7 @@ class SocketService {
   void _startHeartbeat() {
     _pingTimer?.cancel();
     _ping();
-    _pingTimer =
-        Timer.periodic(const Duration(seconds: 25), (_) => _ping());
+    _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) => _ping());
   }
 
   void _stopHeartbeat() {
@@ -298,8 +347,9 @@ class SocketService {
   }
 
   void typing(int conversationId, {required bool started}) {
-    _socket?.emit(started ? 'typing:start' : 'typing:stop',
-        {'conversation_id': conversationId});
+    _socket?.emit(started ? 'typing:start' : 'typing:stop', {
+      'conversation_id': conversationId,
+    });
   }
 
   void _onMessage(dynamic data) {
@@ -310,22 +360,27 @@ class SocketService {
     final inner = json['message'] is Map
         ? Map<String, dynamic>.from(json['message'] as Map)
         : (json['data'] is Map
-            ? Map<String, dynamic>.from(json['data'] as Map)
-            : json);
-    final convId = ((json['conversation_id'] ?? inner['conversation_id']) as num?)
-        ?.toInt();
+              ? Map<String, dynamic>.from(json['data'] as Map)
+              : json);
+    final convId =
+        ((json['conversation_id'] ?? inner['conversation_id']) as num?)
+            ?.toInt();
     if (convId == null) {
       _log('event message:new — dropped (no conversation_id)');
       return;
     }
     final msg = ChatMessage.fromJson(inner);
-    _log('event message:new conv#$convId msg#${msg.id} '
-        'broadcast=${json['is_broadcast'] == true}');
-    _messages.add(RealtimeMessage(
-      conversationId: convId,
-      message: msg,
-      isBroadcast: json['is_broadcast'] == true,
-    ));
+    _log(
+      'event message:new conv#$convId msg#${msg.id} '
+      'broadcast=${json['is_broadcast'] == true}',
+    );
+    _messages.add(
+      RealtimeMessage(
+        conversationId: convId,
+        message: msg,
+        isBroadcast: json['is_broadcast'] == true,
+      ),
+    );
   }
 
   void _onConversationCreated(dynamic data) {
@@ -341,12 +396,14 @@ class SocketService {
     final type = (inner['type'] ?? json['type']) as String?;
     if (type == 'question' || type == 'offer') {
       final who = (inner['subtitle'] ?? inner['title']) as String?;
-      _notifications.add(NotificationEvent(
-        type: type,
-        title: type == 'question'
-            ? 'New question${who != null ? ' from $who' : ''}'
-            : 'New offer${who != null ? ' from $who' : ''}',
-      ));
+      _notifications.add(
+        NotificationEvent(
+          type: type,
+          title: type == 'question'
+              ? 'New question${who != null ? ' from $who' : ''}'
+              : 'New offer${who != null ? ' from $who' : ''}',
+        ),
+      );
     }
   }
 
@@ -362,31 +419,37 @@ class SocketService {
     final json = data is Map ? Map<String, dynamic>.from(data) : const {};
     _log('event report:pending pending=${json['pending_count']}');
     _reportPending.add((json['pending_count'] as num?)?.toInt());
-    _notifications.add(const NotificationEvent(
-      type: 'post_report',
-      title: 'New post reported',
-      body: 'A post was reported — review it in Reported posts.',
-    ));
+    _notifications.add(
+      const NotificationEvent(
+        type: 'post_report',
+        title: 'New post reported',
+        body: 'A post was reported — review it in Reported posts.',
+      ),
+    );
   }
 
   /// `user:pending` → a new signup (or approval change) awaiting admin review.
   void _onUserPending(dynamic data) {
     final json = data is Map ? Map<String, dynamic>.from(data) : const {};
     _log('event user:pending pending=${json['pending_count']}');
-    _notifications.add(const NotificationEvent(
-      type: 'user_pending',
-      title: 'New signup pending',
-      body: 'A new account is awaiting approval.',
-    ));
+    _notifications.add(
+      const NotificationEvent(
+        type: 'user_pending',
+        title: 'New signup pending',
+        body: 'A new account is awaiting approval.',
+      ),
+    );
   }
 
   /// `join_request:pending` → someone asked to join a group you manage.
   void _onJoinRequestPending(dynamic data) {
     _log('event join_request:pending');
-    _notifications.add(const NotificationEvent(
-      type: 'group_join_request',
-      title: 'New group join request',
-    ));
+    _notifications.add(
+      const NotificationEvent(
+        type: 'group_join_request',
+        title: 'New group join request',
+      ),
+    );
     _conversationCreated.add(null);
   }
 
@@ -397,8 +460,8 @@ class SocketService {
     final inner = json['notification'] is Map
         ? Map<String, dynamic>.from(json['notification'] as Map)
         : (json['data'] is Map
-            ? Map<String, dynamic>.from(json['data'] as Map)
-            : json);
+              ? Map<String, dynamic>.from(json['data'] as Map)
+              : json);
     final event = NotificationEvent(
       type: inner['type'] as String?,
       title: inner['title'] as String?,
@@ -419,12 +482,14 @@ class SocketService {
     final json = Map<String, dynamic>.from(data);
     final convId = (json['conversation_id'] as num?)?.toInt();
     if (convId == null) return;
-    _typingEvents.add(TypingEvent(
-      conversationId: convId,
-      userId: (json['user_id'] as num?)?.toInt(),
-      name: json['name'] as String?,
-      isTyping: json['is_typing'] == true,
-    ));
+    _typingEvents.add(
+      TypingEvent(
+        conversationId: convId,
+        userId: (json['user_id'] as num?)?.toInt(),
+        name: json['name'] as String?,
+        isTyping: json['is_typing'] == true,
+      ),
+    );
   }
 
   void _onPresence(dynamic data) {
@@ -432,11 +497,13 @@ class SocketService {
     final json = Map<String, dynamic>.from(data);
     final userId = (json['user_id'] as num?)?.toInt();
     if (userId == null) return;
-    _presenceEvents.add(PresenceEvent(
-      userId: userId,
-      isOnline: json['status'] == 'online',
-      lastSeenAt: DateTime.tryParse('${json['last_seen_at']}'),
-    ));
+    _presenceEvents.add(
+      PresenceEvent(
+        userId: userId,
+        isOnline: json['status'] == 'online',
+        lastSeenAt: DateTime.tryParse('${json['last_seen_at']}'),
+      ),
+    );
   }
 
   /// Asks the server for the current online/last-seen status of [userIds].
@@ -446,27 +513,33 @@ class SocketService {
     if (socket == null || !socket.connected || userIds.isEmpty) return {};
     final completer = Completer<Map<int, PresenceEvent>>();
     try {
-      socket.emitWithAck('presence:check', {'user_ids': userIds}, ack: (data) {
-        final out = <int, PresenceEvent>{};
-        if (data is Map) {
-          data.forEach((k, v) {
-            final id = int.tryParse('$k');
-            if (id != null && v is Map) {
-              out[id] = PresenceEvent(
-                userId: id,
-                isOnline: v['status'] == 'online',
-                lastSeenAt: DateTime.tryParse('${v['last_seen_at']}'),
-              );
-            }
-          });
-        }
-        if (!completer.isCompleted) completer.complete(out);
-      });
+      socket.emitWithAck(
+        'presence:check',
+        {'user_ids': userIds},
+        ack: (data) {
+          final out = <int, PresenceEvent>{};
+          if (data is Map) {
+            data.forEach((k, v) {
+              final id = int.tryParse('$k');
+              if (id != null && v is Map) {
+                out[id] = PresenceEvent(
+                  userId: id,
+                  isOnline: v['status'] == 'online',
+                  lastSeenAt: DateTime.tryParse('${v['last_seen_at']}'),
+                );
+              }
+            });
+          }
+          if (!completer.isCompleted) completer.complete(out);
+        },
+      );
     } catch (_) {
       return {};
     }
-    return completer.future.timeout(const Duration(seconds: 4),
-        onTimeout: () => {});
+    return completer.future.timeout(
+      const Duration(seconds: 4),
+      onTimeout: () => {},
+    );
   }
 
   void _onRead(dynamic data) {
@@ -475,11 +548,13 @@ class SocketService {
     final convId = (json['conversation_id'] as num?)?.toInt();
     final lastReadAt = DateTime.tryParse('${json['last_read_at']}');
     if (convId == null || lastReadAt == null) return;
-    _readEvents.add(ReadEvent(
-      conversationId: convId,
-      userId: (json['user_id'] as num?)?.toInt(),
-      lastReadAt: lastReadAt,
-    ));
+    _readEvents.add(
+      ReadEvent(
+        conversationId: convId,
+        userId: (json['user_id'] as num?)?.toInt(),
+        lastReadAt: lastReadAt,
+      ),
+    );
   }
 
   void _onUnread(dynamic data) {
@@ -487,18 +562,22 @@ class SocketService {
     final json = Map<String, dynamic>.from(data);
     _log('event unread:update total=${json['total']}');
     // Inbox rows listen to this regardless of the global badge cubit.
-    _unreadUpdates.add(UnreadUpdate(
-      total: (json['total'] as num?)?.toInt(),
-      conversationId: (json['conversation_id'] as num?)?.toInt(),
-      conversationUnread: (json['conversation_unread'] as num?)?.toInt(),
-    ));
+    _unreadUpdates.add(
+      UnreadUpdate(
+        total: (json['total'] as num?)?.toInt(),
+        conversationId: (json['conversation_id'] as num?)?.toInt(),
+        conversationUnread: (json['conversation_unread'] as num?)?.toInt(),
+      ),
+    );
     if (!sl.isRegistered<UnreadCubit>()) return;
-    sl<UnreadCubit>().setCounts(UnreadCounts(
-      total: (json['total'] as num?)?.toInt() ?? 0,
-      chats: (json['chats'] as num?)?.toInt() ?? 0,
-      questions: (json['questions'] as num?)?.toInt() ?? 0,
-      offers: (json['offers'] as num?)?.toInt() ?? 0,
-    ));
+    sl<UnreadCubit>().setCounts(
+      UnreadCounts(
+        total: (json['total'] as num?)?.toInt() ?? 0,
+        chats: (json['chats'] as num?)?.toInt() ?? 0,
+        questions: (json['questions'] as num?)?.toInt() ?? 0,
+        offers: (json['offers'] as num?)?.toInt() ?? 0,
+      ),
+    );
   }
 
   Future<void> disconnect() async {

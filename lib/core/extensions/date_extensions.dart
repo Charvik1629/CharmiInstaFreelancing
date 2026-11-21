@@ -11,6 +11,21 @@ extension RelativeTimeX on DateTime {
     return '${day.toString().padLeft(2, '0')}/${month.toString().padLeft(2, '0')}';
   }
 
+  String get feedTimeAgo {
+    final diff = DateTime.now().difference(this);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} ${diff.inMinutes == 1 ? 'min' : 'mins'} ago';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours} ${diff.inHours == 1 ? 'hour' : 'hours'} ago';
+    }
+    if (diff.inDays < 7) {
+      return '${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
+    }
+    return timeAgo;
+  }
+
   /// Clock time like "9:05 PM" — used on chat bubbles, where the day/date lives
   /// in the date separator header so every message just needs its time.
   String get clockTime {

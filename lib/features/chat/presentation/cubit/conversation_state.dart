@@ -17,8 +17,16 @@ class ConversationState extends Equatable {
     this.peerLastSeen,
     this.broadcastQuota,
     this.broadcastLimitReached = false,
+    this.replyingTo,
+    this.disappearing = const DisappearingSettings(),
+    this.changingMessages = const {},
+    this.chatDeleted = false,
   });
 
+  final ChatMessage? replyingTo;
+  final DisappearingSettings disappearing;
+  final Set<int> changingMessages;
+  final bool chatDeleted;
   final ThreadStatus status;
 
   /// Ordered oldest → newest for display.
@@ -64,8 +72,17 @@ class ConversationState extends Equatable {
     DateTime? peerLastSeen,
     BroadcastQuota? broadcastQuota,
     bool? broadcastLimitReached,
+    ChatMessage? replyingTo,
+    bool clearReply = false,
+    DisappearingSettings? disappearing,
+    Set<int>? changingMessages,
+    bool? chatDeleted,
   }) {
     return ConversationState(
+      replyingTo: clearReply ? null : replyingTo ?? this.replyingTo,
+      disappearing: disappearing ?? this.disappearing,
+      changingMessages: changingMessages ?? this.changingMessages,
+      chatDeleted: chatDeleted ?? this.chatDeleted,
       status: status ?? this.status,
       messages: messages ?? this.messages,
       hasMore: hasMore ?? this.hasMore,
@@ -85,18 +102,22 @@ class ConversationState extends Equatable {
 
   @override
   List<Object?> get props => [
-        status,
-        messages,
-        hasMore,
-        nextBeforeId,
-        isLoadingMore,
-        isSending,
-        errorMessage,
-        typingName,
-        peerLastReadAt,
-        peerOnline,
-        peerLastSeen,
-        broadcastQuota,
-        broadcastLimitReached,
-      ];
+    status,
+    messages,
+    hasMore,
+    nextBeforeId,
+    isLoadingMore,
+    isSending,
+    errorMessage,
+    typingName,
+    peerLastReadAt,
+    peerOnline,
+    peerLastSeen,
+    broadcastQuota,
+    broadcastLimitReached,
+    replyingTo,
+    disappearing,
+    changingMessages,
+    chatDeleted,
+  ];
 }

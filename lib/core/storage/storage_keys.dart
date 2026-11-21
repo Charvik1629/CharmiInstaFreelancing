@@ -6,6 +6,7 @@ class StorageKeys {
   static const String authToken = 'auth_token';
 
   // Preferences (shared_preferences)
+  static const String installationId = 'installation_id';
   static const String onboardingSeen = 'onboarding_seen';
   static const String cachedUserJson = 'cached_user_json';
   static const String themeMode = 'theme_mode';

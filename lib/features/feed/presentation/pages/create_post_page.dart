@@ -8,6 +8,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/models/load.dart';
+import '../../../../core/models/post_location.dart';
+import '../../../chat/presentation/pages/location_picker_page.dart';
 import '../../../../core/permissions/app_permission.dart';
 import '../../../../core/permissions/permission_flow.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -60,12 +62,15 @@ class _CreatePostViewState extends State<_CreatePostView> {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 2, bottom: AppSpacing.xs),
-            child: Text('ADD PHOTO',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    color: sheetCtx.nexveero.textSecondary)),
+            child: Text(
+              'ADD PHOTO',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: sheetCtx.nexveero.textSecondary,
+              ),
+            ),
           ),
           _AttachOption(
             icon: Icons.photo_library_outlined,
@@ -97,7 +102,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
     // picker, which grants access to the chosen items without a runtime
     // permission. Gating it behind READ_MEDIA_IMAGES silently blocked "Add".
     try {
-      final files = await _picker.pickMultiImage(maxWidth: 1600, imageQuality: 85);
+      final files = await _picker.pickMultiImage(
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
       for (final f in files) {
         cubit.addImage(f.path);
       }
@@ -112,7 +120,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
     if (!outcome.isUsable) return;
     try {
       final f = await _picker.pickImage(
-          source: ImageSource.camera, maxWidth: 1600, imageQuality: 85);
+        source: ImageSource.camera,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
       if (f != null) cubit.addImage(f.path);
     } catch (_) {
       if (mounted) AppOverlays.snack(context, 'Could not open camera');
@@ -127,7 +138,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
         if (state.submitStatus == SubmitStatus.success) {
           context.pop<Load>(state.created);
         } else if (state.submitStatus == SubmitStatus.failure) {
-          AppOverlays.snack(context, state.errorMessage ?? 'Could not publish post');
+          AppOverlays.snack(
+            context,
+            state.errorMessage ?? 'Could not publish post',
+          );
         }
       },
       child: Scaffold(
@@ -138,9 +152,10 @@ class _CreatePostViewState extends State<_CreatePostView> {
           ),
           centerTitle: true,
           title: Text(
-              context.select((CreatePostCubit c) => c.state.editing)
-                  ? 'Edit post'
-                  : 'New post'),
+            context.select((CreatePostCubit c) => c.state.editing)
+                ? 'Edit post'
+                : 'New post',
+          ),
           actions: const [_PublishAction()],
         ),
         body: SafeArea(
@@ -179,17 +194,23 @@ class _PublishAction extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Center(
               child: SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           );
         }
         return Padding(
           padding: const EdgeInsets.only(right: AppSpacing.sm),
           child: TextButton(
-            onPressed:
-                state.canSubmit ? () => context.read<CreatePostCubit>().submit() : null,
-            child: Text(state.editing ? 'Save' : 'Publish',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+            onPressed: state.canSubmit
+                ? () => context.read<CreatePostCubit>().submit()
+                : null,
+            child: Text(
+              state.editing ? 'Save' : 'Publish',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         );
       },
@@ -236,17 +257,22 @@ class _ImageStrip extends StatelessWidget {
                     onAcceptWithDetails: (d) => cubit.reorderImages(d.data, i),
                     builder: (context, candidate, rejected) =>
                         LongPressDraggable<int>(
-                      data: i,
-                      feedback: _Thumb(
-                          path: paths[i], index: i, onRemove: () {}, size: 96),
-                      childWhenDragging: _ThumbPlaceholder(
-                          highlighted: candidate.isNotEmpty),
-                      child: _Thumb(
-                        path: paths[i],
-                        index: i,
-                        onRemove: () => cubit.removeImageAt(i),
-                      ),
-                    ),
+                          data: i,
+                          feedback: _Thumb(
+                            path: paths[i],
+                            index: i,
+                            onRemove: () {},
+                            size: 96,
+                          ),
+                          childWhenDragging: _ThumbPlaceholder(
+                            highlighted: candidate.isNotEmpty,
+                          ),
+                          child: _Thumb(
+                            path: paths[i],
+                            index: i,
+                            onRemove: () => cubit.removeImageAt(i),
+                          ),
+                        ),
                   ),
                 if (paths.length < CreatePostCubit.maxImages)
                   _AddTile(onTap: onAdd),
@@ -256,13 +282,17 @@ class _ImageStrip extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
-                  Icon(Icons.drag_indicator, size: 16, color: context.nexveero.textSecondary),
+                  Icon(
+                    Icons.drag_indicator,
+                    size: 16,
+                    color: context.nexveero.textSecondary,
+                  ),
                   const SizedBox(width: 4),
-                  Text('Hold & drag to reorder',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: context.nexveero.textSecondary)),
+                  Text(
+                    'Hold & drag to reorder',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: context.nexveero.textSecondary),
+                  ),
                 ],
               ),
             ],
@@ -274,11 +304,12 @@ class _ImageStrip extends StatelessWidget {
 }
 
 class _Thumb extends StatelessWidget {
-  const _Thumb(
-      {required this.path,
-      required this.index,
-      required this.onRemove,
-      this.size});
+  const _Thumb({
+    required this.path,
+    required this.index,
+    required this.onRemove,
+    this.size,
+  });
 
   final String path;
   final int index;
@@ -295,10 +326,12 @@ class _Thumb extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          child: Image.file(File(path),
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  Container(color: context.nexveero.elevated)),
+          child: Image.file(
+            File(path),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                Container(color: context.nexveero.elevated),
+          ),
         ),
         Positioned(
           left: 6,
@@ -309,9 +342,14 @@ class _Thumb extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
-            child: Text('${index + 1}',
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+            child: Text(
+              '${index + 1}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
         Positioned(
@@ -368,11 +406,14 @@ class _ExistingThumb extends StatelessWidget {
               color: Colors.black54,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
-            child: const Text('Current',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Current',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ],
@@ -393,7 +434,10 @@ class _ThumbPlaceholder extends StatelessWidget {
         color: context.nexveero.elevated,
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: highlighted
-            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5)
+            ? Border.all(
+                color: Theme.of(context).colorScheme.primary,
+                width: 1.5,
+              )
             : null,
       ),
     );
@@ -403,11 +447,12 @@ class _ThumbPlaceholder extends StatelessWidget {
 /// A row in the "ADD PHOTO"/attach sheet (design: 40×40 tinted icon tile with a
 /// title + subtitle).
 class _AttachOption extends StatelessWidget {
-  const _AttachOption(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.onTap});
+  const _AttachOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String title;
@@ -437,13 +482,21 @@ class _AttachOption extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w700)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 11, color: context.nexveero.textSecondary)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.nexveero.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -470,7 +523,10 @@ class _AddTile extends StatelessWidget {
           children: [
             Icon(Icons.add_photo_alternate_outlined, color: primary),
             const SizedBox(height: 4),
-            Text('Add', style: TextStyle(color: primary, fontWeight: FontWeight.w600)),
+            Text(
+              'Add',
+              style: TextStyle(color: primary, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       ),
@@ -488,7 +544,9 @@ class DottedBorderBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       painter: _DashedRectPainter(
-          color: context.nexveero.border, radius: AppRadius.md),
+        color: context.nexveero.border,
+        radius: AppRadius.md,
+      ),
       child: SizedBox.expand(child: Center(child: child)),
     );
   }
@@ -506,7 +564,9 @@ class _DashedRectPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     final rrect = RRect.fromRectAndRadius(
-        Offset.zero & size, Radius.circular(radius));
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
     final path = Path()..addRRect(rrect);
     const dash = 5.0, gap = 4.0;
     for (final metric in path.computeMetrics()) {
@@ -538,7 +598,8 @@ class _CaptionCardState extends State<_CaptionCard> {
     super.initState();
     // Seed from the cubit so editing a post pre-fills the existing text.
     _controller = TextEditingController(
-        text: context.read<CreatePostCubit>().state.title);
+      text: context.read<CreatePostCubit>().state.title,
+    );
   }
 
   @override
@@ -617,7 +678,8 @@ class _CategoryPicker extends StatelessWidget {
                   AppChip(
                     label: type.name,
                     selected: type.id == state.selectedTypeId,
-                    onTap: () => context.read<CreatePostCubit>().selectType(type.id),
+                    onTap: () =>
+                        context.read<CreatePostCubit>().selectType(type.id),
                   ),
               ],
             ),
@@ -628,8 +690,8 @@ class _CategoryPicker extends StatelessWidget {
   }
 }
 
-/// Location + Add tags rows (design). Tags are wired to GET /tags; location has
-/// no API yet (see BACKEND_REQUIREMENTS I2 / post location), so it stays gated.
+/// Post location uses the same map/search/current-location picker as chat.
+/// The selection is saved with the post and can be replaced or removed.
 class _MetaRows extends StatelessWidget {
   const _MetaRows();
 
@@ -646,11 +708,56 @@ class _MetaRows extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _MetaRow(
-          icon: Icons.location_on_outlined,
-          label: 'Add location',
-          onTap: () => AppOverlays.snack(
-              context, 'Location tagging arrives with an upcoming update.'),
+        BlocBuilder<CreatePostCubit, CreatePostState>(
+          builder: (context, state) => Row(
+            children: [
+              Expanded(
+                child: _MetaRow(
+                  icon: Icons.location_on_outlined,
+                  label: state.location == null
+                      ? 'Add location'
+                      : (state.location!.label?.trim().isNotEmpty == true
+                            ? state.location!.label!
+                            : '${state.location!.lat.toStringAsFixed(4)}, ${state.location!.lng.toStringAsFixed(4)}'),
+                  onTap: () async {
+                    final cubit = context.read<CreatePostCubit>();
+                    final location = await Navigator.of(context)
+                        .push<PickedLocation>(
+                          MaterialPageRoute(
+                            builder: (_) => LocationPickerPage(
+                              title: 'Post location',
+                              confirmLabel: 'Use this location',
+                              initialLocation: state.location == null
+                                  ? null
+                                  : PickedLocation(
+                                      state.location!.lat,
+                                      state.location!.lng,
+                                      label: state.location!.label,
+                                    ),
+                            ),
+                          ),
+                        );
+                    if (location != null && context.mounted) {
+                      cubit.setLocation(
+                        PostLocation(
+                          location.lat,
+                          location.lng,
+                          label: location.label,
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+              if (state.location != null)
+                IconButton(
+                  tooltip: 'Remove location',
+                  icon: const Icon(Icons.close),
+                  onPressed: () =>
+                      context.read<CreatePostCubit>().setLocation(null),
+                ),
+            ],
+          ),
         ),
         Divider(height: 1, color: context.nexveero.border),
         _MetaRow(
@@ -672,9 +779,8 @@ class _MetaRows extends StatelessWidget {
                     Chip(
                       label: Text(t.name),
                       onDeleted: () => context.read<CreatePostCubit>().setTags(
-                          state.selectedTags
-                              .where((x) => x.id != t.id)
-                              .toList()),
+                        state.selectedTags.where((x) => x.id != t.id).toList(),
+                      ),
                     ),
                 ],
               ),
@@ -687,7 +793,11 @@ class _MetaRows extends StatelessWidget {
 }
 
 class _MetaRow extends StatelessWidget {
-  const _MetaRow({required this.icon, required this.label, required this.onTap});
+  const _MetaRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -698,7 +808,10 @@ class _MetaRow extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      title: Text(label, style: TextStyle(color: context.nexveero.textSecondary)),
+      title: Text(
+        label,
+        style: TextStyle(color: context.nexveero.textSecondary),
+      ),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: onTap,
     );

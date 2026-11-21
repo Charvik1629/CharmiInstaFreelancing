@@ -4,6 +4,7 @@ import '../../features/tags/domain/entities/tag.dart';
 import '../extensions/json_extensions.dart';
 import 'author.dart';
 import 'post_type.dart';
+import 'post_location.dart';
 
 /// Media attached to a load. [kind] is `image` or `file` (e.g. a PDF).
 enum MediaKind { image, file, none }
@@ -49,6 +50,7 @@ class Load extends Equatable {
     required this.id,
     required this.title,
     this.body,
+    this.location,
     this.mediaUrl,
     this.mediaMime,
     this.mediaKind = MediaKind.none,
@@ -78,6 +80,7 @@ class Load extends Equatable {
   final int id;
   final String title;
   final String? body;
+  final PostLocation? location;
   final String? mediaUrl;
   final String? mediaMime;
   final MediaKind mediaKind;
@@ -137,6 +140,7 @@ class Load extends Equatable {
       id: json.asIntOr('id', 0),
       title: json.asStringOr('title', ''),
       body: json.asString('body'),
+      location: PostLocation.fromJson(json),
       mediaUrl: json.asString('media_url'),
       mediaMime: json.asString('media_mime'),
       mediaKind: _kind(json.asString('media_kind')),
@@ -217,6 +221,7 @@ class Load extends Equatable {
       id: id,
       title: title,
       body: body,
+      location: location,
       mediaUrl: mediaUrl,
       mediaMime: mediaMime,
       mediaKind: mediaKind,
@@ -246,7 +251,7 @@ class Load extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, title, body, mediaUrl, mediaKind, media, status, isBoosted, isBusiness,
+        id, title, body, location, mediaUrl, mediaKind, media, status, isBoosted, isBusiness,
         postType, author, isOwn, canMessage, viewerHasRequested, conversationId,
         viewerHasOffer, offerConversationId,
       ];

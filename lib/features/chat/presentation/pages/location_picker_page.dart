@@ -21,7 +21,16 @@ class PickedLocation {
 /// WhatsApp-style "share location" picker: a map with a fixed centre pin — pan
 /// the map to place it, then Send. Recenters on the user's current location.
 class LocationPickerPage extends StatefulWidget {
-  const LocationPickerPage({super.key});
+  const LocationPickerPage({
+    super.key,
+    this.initialLocation,
+    this.title = 'Send location',
+    this.confirmLabel = 'Send this location',
+  });
+
+  final PickedLocation? initialLocation;
+  final String title;
+  final String confirmLabel;
 
   @override
   State<LocationPickerPage> createState() => _LocationPickerPageState();
@@ -32,6 +41,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   GoogleMapController? _controller;
   LatLng _center = _fallback;
   bool _ready = false;
+  bool _permissionGranted = false;
+  bool _selecting = false;
+  int _searchVersion = 0;
+  int _selectionVersion = 0;
 
   // Places autocomplete search.
   final _search = TextEditingController();
@@ -43,39 +56,60 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   @override
   void initState() {
     super.initState();
-    _goToCurrent(initial: true);
+    final initial = widget.initialLocation;
+    if (initial != null) {
+      _center = LatLng(initial.lat, initial.lng);
+      _pickedLabel = initial.label;
+      _search.text = initial.label ?? '';
+      _ready = true;
+      _ensurePermission();
+    } else {
+      _goToCurrent(initial: true);
+    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _search.dispose();
+    _dio.close(force: true);
     _controller?.dispose();
     super.dispose();
   }
 
   void _onSearchChanged(String q) {
     _debounce?.cancel();
+    ++_searchVersion;
+    setState(() {
+      _predictions = const [];
+      _selecting = false;
+    });
     if (q.trim().length < 3) {
       setState(() => _predictions = const []);
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 350), () => _autocomplete(q));
+    _debounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _autocomplete(q),
+    );
   }
 
   Future<void> _autocomplete(String q) async {
+    final version = _searchVersion;
     try {
       // Places API (New): POST places:autocomplete with the key in a header.
       final res = await _dio.post(
         'https://places.googleapis.com/v1/places:autocomplete',
-        options: Options(headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': MapsConfig.apiKey,
-        }),
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': MapsConfig.apiKey,
+          },
+        ),
         data: {'input': q},
       );
       final list = (res.data?['suggestions'] as List?) ?? const [];
-      if (!mounted) return;
+      if (!mounted || version != _searchVersion) return;
       setState(() {
         _predictions = [
           for (final s in list)
@@ -88,34 +122,63 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         ];
       });
     } catch (_) {
-      /* ignore — search just shows nothing */
+      if (mounted && version == _searchVersion) {
+        AppOverlays.snack(
+          context,
+          'Place search is unavailable. You can choose a point on the map.',
+        );
+      }
     }
   }
 
   Future<void> _selectPlace(({String description, String placeId}) p) async {
     FocusScope.of(context).unfocus();
+    _debounce?.cancel();
+    final version = ++_searchVersion;
+    final selectionVersion = ++_selectionVersion;
     setState(() {
+      _selecting = true;
       _predictions = const [];
       _search.text = p.description;
-      _pickedLabel = p.description;
     });
     try {
       // Places API (New): GET places/{id} with a `location` field mask.
       final res = await _dio.get(
         'https://places.googleapis.com/v1/places/${p.placeId}',
-        options: Options(headers: {
-          'X-Goog-Api-Key': MapsConfig.apiKey,
-          'X-Goog-FieldMask': 'location',
-        }),
+        options: Options(
+          headers: {
+            'X-Goog-Api-Key': MapsConfig.apiKey,
+            'X-Goog-FieldMask': 'location',
+          },
+        ),
       );
       final loc = res.data?['location'];
-      if (loc == null || !mounted) return;
-      final target = LatLng((loc['latitude'] as num).toDouble(),
-          (loc['longitude'] as num).toDouble());
-      setState(() => _center = target);
+      if (!mounted ||
+          version != _searchVersion ||
+          selectionVersion != _selectionVersion) {
+        return;
+      }
+      if (loc == null) throw StateError('Missing place location');
+      final target = LatLng(
+        (loc['latitude'] as num).toDouble(),
+        (loc['longitude'] as num).toDouble(),
+      );
+      setState(() {
+        _center = target;
+        _pickedLabel = p.description;
+      });
       _controller?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
     } catch (_) {
-      /* ignore */
+      if (mounted && version == _searchVersion) {
+        AppOverlays.snack(
+          context,
+          'Could not load that place. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted && version == _searchVersion) {
+        setState(() => _selecting = false);
+      }
     }
   }
 
@@ -125,8 +188,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
     }
-    return perm == LocationPermission.whileInUse ||
+    final granted =
+        perm == LocationPermission.whileInUse ||
         perm == LocationPermission.always;
+    if (mounted) setState(() => _permissionGranted = granted);
+    return granted;
   }
 
   Future<Position?> _current() async {
@@ -135,7 +201,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       if (!await _ensurePermission()) return null;
       if (!await Geolocator.isLocationServiceEnabled()) {
         if (mounted) {
-          AppOverlays.snack(context, 'Turn on location to use your current spot.');
+          AppOverlays.snack(
+            context,
+            'Turn on location to use your current spot.',
+          );
         }
         return null;
       }
@@ -169,14 +238,26 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   }
 
   Future<void> _goToCurrent({bool initial = false}) async {
+    final version = initial ? _selectionVersion : ++_selectionVersion;
+    if (!initial) {
+      ++_searchVersion;
+      _debounce?.cancel();
+      _search.clear();
+      setState(() {
+        _pickedLabel = null;
+        _predictions = const [];
+      });
+    }
     // On open, center instantly on the last cached fix, then refine with a
     // fresh one, so the pin starts on (or near) the user's current place.
     if (initial) {
       final last = await _lastKnown();
-      if (last != null && mounted) _moveTo(last);
+      if (last != null && mounted && version == _selectionVersion) {
+        _moveTo(last);
+      }
     }
     final pos = await _current();
-    if (!mounted) return;
+    if (!mounted || version != _selectionVersion) return;
     if (pos != null) {
       _moveTo(pos);
     } else if (initial) {
@@ -187,18 +268,31 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Send location')),
+      appBar: AppBar(title: Text(widget.title)),
       body: Stack(
         alignment: Alignment.center,
         children: [
-          GoogleMap(
-            initialCameraPosition:
-                CameraPosition(target: _center, zoom: _ready ? 16 : 12),
-            onMapCreated: (c) => _controller = c,
-            onCameraMove: (pos) => _center = pos.target,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
+          Listener(
+            onPointerDown: (_) {
+              ++_selectionVersion;
+              _pickedLabel = null;
+            },
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: _center,
+                zoom: _ready ? 16 : 12,
+              ),
+              onMapCreated: (c) {
+                _controller = c;
+                if (_ready) {
+                  c.moveCamera(CameraUpdate.newLatLngZoom(_center, 16));
+                }
+              },
+              onCameraMove: (pos) => _center = pos.target,
+              myLocationEnabled: _permissionGranted,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+            ),
           ),
           // Fixed centre pin (sits slightly above centre so the tip marks the spot).
           const Padding(
@@ -223,11 +317,17 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             child: SafeArea(
               top: false,
               child: AppButton(
-                label: 'Send this location',
+                label: widget.confirmLabel,
                 icon: Icons.send,
-                onPressed: () => Navigator.of(context).pop(PickedLocation(
-                    _center.latitude, _center.longitude,
-                    label: _pickedLabel)),
+                onPressed: _selecting
+                    ? null
+                    : () => Navigator.of(context).pop(
+                        PickedLocation(
+                          _center.latitude,
+                          _center.longitude,
+                          label: _pickedLabel,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -256,7 +356,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                 icon: const Icon(Icons.close),
                                 onPressed: () {
                                   _search.clear();
-                                  setState(() => _predictions = const []);
+                                  _onSearchChanged('');
                                 },
                               ),
                         filled: true,
@@ -277,8 +377,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 12),
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 12,
+                          ),
                         ],
                       ),
                       child: ListView.separated(
@@ -289,9 +390,15 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             Divider(height: 1, color: context.nexveero.border),
                         itemBuilder: (_, i) => ListTile(
                           dense: true,
-                          leading: const Icon(Icons.location_on_outlined, size: 20),
-                          title: Text(_predictions[i].description,
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          leading: const Icon(
+                            Icons.location_on_outlined,
+                            size: 20,
+                          ),
+                          title: Text(
+                            _predictions[i].description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           onTap: () => _selectPlace(_predictions[i]),
                         ),
                       ),

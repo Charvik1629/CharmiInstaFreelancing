@@ -26,7 +26,43 @@ class User extends Equatable {
     this.isVerified = false,
     this.isPremium = false,
     this.lastSeenAt,
+    this.capabilities = const {},
+    this.businessDetailsComplete,
+    this.businessDetailsMissing = const [],
+    this.businessDetailsRequiredFields = const [],
+    this.businessDetails = const {},
   });
+
+  final Map<String, bool> capabilities;
+  final bool? businessDetailsComplete;
+  final List<String> businessDetailsMissing;
+  final List<String> businessDetailsRequiredFields;
+  final Map<String, dynamic> businessDetails;
+
+  bool capability(String key, {bool fallback = true}) =>
+      !isRejected && (capabilities[key] ?? fallback);
+  bool get canBrowse => capability('can_browse');
+  bool get canUpdateBusiness => capability('can_update_business');
+  bool get canChat => !isPending && capability('can_chat');
+  bool get canAsk => !isPending && capability('can_ask');
+  bool get canOffer => !isPending && capability('can_offer');
+  bool get needsBusinessDetails => businessDetailsComplete == false;
+
+  static const businessKeys = [
+    'company_type',
+    'msme_number',
+    'association',
+    'website',
+    'address',
+    'city',
+    'state',
+    'pincode',
+    'description',
+    'products',
+    'tags',
+    'social_links',
+    'logo_url',
+  ];
 
   final int id;
   final String name;
@@ -46,7 +82,7 @@ class User extends Equatable {
   final String? businessName;
 
   /// Super-admin gate: `pending`, `approved`, or `rejected`. New accounts start
-  /// `pending` and cannot log in (login returns 403) until an admin approves.
+  /// `pending` can log in with restricted capabilities; rejected stays blocked.
   final String approvalStatus;
 
   final String? gstNumber;
@@ -79,53 +115,76 @@ class User extends Equatable {
   bool get isRejected => approvalStatus == 'rejected';
 
   /// Anyone who can create posts / receive payments (creator or admin).
-  bool get canPost => isCreator || isAdmin;
+  bool get canPost =>
+      !isPending &&
+      capability('can_create_post', fallback: isCreator || isAdmin);
 
   factory User.fromJson(Map<String, dynamic> json) => User(
-        id: json.asIntOr('id', 0),
-        name: json.asStringOr('name', ''),
-        username: json.asString('username'),
-        shareUrl: json.asString('share_url'),
-        email: json.asString('email'),
-        avatarUrl: json.asString('avatar_url'),
-        bio: json.asString('bio'),
-        phone: json.asString('phone'),
-        businessName: json.asString('business_name'),
-        approvalStatus: json.asStringOr('approval_status', 'approved'),
-        gstNumber: json.asString('gst_number'),
-        panNumber: json.asString('pan_number'),
-        aadhaarNumber: json.asString('aadhaar_number'),
-        referralCode: json.asString('referral_code'),
-        roles: json.asStringList('roles'),
-        creditBalance: json.asIntOr('credit_balance', 0),
-        postsCount: json.asIntOr('posts_count', 0),
-        isVerified: json.asBool('is_verified'),
-        isPremium: json.asBool('is_premium'),
-        lastSeenAt: json.asDate('last_seen_at'),
-      );
+    id: json.asIntOr('id', 0),
+    name: json.asStringOr('name', ''),
+    username: json.asString('username'),
+    shareUrl: json.asString('share_url'),
+    email: json.asString('email'),
+    avatarUrl: json.asString('avatar_url'),
+    bio: json.asString('bio'),
+    phone: json.asString('phone'),
+    businessName: json.asString('business_name'),
+    approvalStatus: json.asStringOr('approval_status', 'approved'),
+    gstNumber: json.asString('gst_number'),
+    panNumber: json.asString('pan_number'),
+    aadhaarNumber: json.asString('aadhaar_number'),
+    referralCode: json.asString('referral_code'),
+    roles: json.asStringList('roles'),
+    creditBalance: json.asIntOr('credit_balance', 0),
+    postsCount: json.asIntOr('posts_count', 0),
+    isVerified: json.asBool('is_verified'),
+    isPremium: json.asBool('is_premium'),
+    lastSeenAt: json.asDate('last_seen_at'),
+    capabilities: {
+      for (final entry in (json.asMap('capabilities') ?? {}).entries)
+        entry.key: {'value': entry.value}.asBool('value'),
+    },
+    businessDetailsComplete: json['business_details_complete'] == null
+        ? null
+        : json.asBool('business_details_complete'),
+    businessDetailsMissing: json.asStringList('business_details_missing'),
+    businessDetailsRequiredFields: json.asStringList(
+      'business_details_required_fields',
+    ),
+    businessDetails: {
+      for (final key in businessKeys)
+        if (json.containsKey(key)) key: json[key],
+    },
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'username': username,
-        'share_url': shareUrl,
-        'email': email,
-        'avatar_url': avatarUrl,
-        'bio': bio,
-        'phone': phone,
-        'business_name': businessName,
-        'approval_status': approvalStatus,
-        'gst_number': gstNumber,
-        'pan_number': panNumber,
-        'aadhaar_number': aadhaarNumber,
-        'referral_code': referralCode,
-        'roles': roles,
-        'credit_balance': creditBalance,
-        'posts_count': postsCount,
-        'is_verified': isVerified,
-        'is_premium': isPremium,
-        'last_seen_at': lastSeenAt?.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'username': username,
+    'share_url': shareUrl,
+    'email': email,
+    'avatar_url': avatarUrl,
+    'bio': bio,
+    'phone': phone,
+    'business_name': businessName,
+    'approval_status': approvalStatus,
+    'gst_number': gstNumber,
+    'pan_number': panNumber,
+    'aadhaar_number': aadhaarNumber,
+    'referral_code': referralCode,
+    'roles': roles,
+    'credit_balance': creditBalance,
+    'posts_count': postsCount,
+    'is_verified': isVerified,
+    'is_premium': isPremium,
+    'last_seen_at': lastSeenAt?.toIso8601String(),
+    'capabilities': capabilities,
+    if (businessDetailsComplete != null)
+      'business_details_complete': businessDetailsComplete,
+    'business_details_missing': businessDetailsMissing,
+    'business_details_required_fields': businessDetailsRequiredFields,
+    ...businessDetails,
+  };
 
   User copyWith({
     String? name,
@@ -147,6 +206,11 @@ class User extends Equatable {
     bool? isVerified,
     bool? isPremium,
     DateTime? lastSeenAt,
+    Map<String, bool>? capabilities,
+    bool? businessDetailsComplete,
+    List<String>? businessDetailsMissing,
+    List<String>? businessDetailsRequiredFields,
+    Map<String, dynamic>? businessDetails,
   }) {
     return User(
       id: id,
@@ -169,30 +233,43 @@ class User extends Equatable {
       isVerified: isVerified ?? this.isVerified,
       isPremium: isPremium ?? this.isPremium,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      capabilities: capabilities ?? this.capabilities,
+      businessDetailsComplete:
+          businessDetailsComplete ?? this.businessDetailsComplete,
+      businessDetailsMissing:
+          businessDetailsMissing ?? this.businessDetailsMissing,
+      businessDetailsRequiredFields:
+          businessDetailsRequiredFields ?? this.businessDetailsRequiredFields,
+      businessDetails: businessDetails ?? this.businessDetails,
     );
   }
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        username,
-        shareUrl,
-        email,
-        avatarUrl,
-        bio,
-        phone,
-        businessName,
-        approvalStatus,
-        gstNumber,
-        panNumber,
-        aadhaarNumber,
-        referralCode,
-        roles,
-        creditBalance,
-        postsCount,
-        isVerified,
-        isPremium,
-        lastSeenAt,
-      ];
+    id,
+    name,
+    username,
+    shareUrl,
+    email,
+    avatarUrl,
+    bio,
+    phone,
+    businessName,
+    approvalStatus,
+    gstNumber,
+    panNumber,
+    aadhaarNumber,
+    referralCode,
+    roles,
+    creditBalance,
+    postsCount,
+    isVerified,
+    isPremium,
+    lastSeenAt,
+    capabilities,
+    businessDetailsComplete,
+    businessDetailsMissing,
+    businessDetailsRequiredFields,
+    businessDetails,
+  ];
 }

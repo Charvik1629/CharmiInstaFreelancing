@@ -34,6 +34,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
   @override
   Future<User> updateProfile(ProfileUpdate update) async {
     final fields = <String, dynamic>{
+      if (update.requireComplete) 'require_complete': true,
       if (update.name != null) 'name': update.name,
       if (update.bio != null) 'bio': update.bio,
       if (update.phone != null) 'phone': update.phone,
@@ -53,15 +54,16 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         'products': update.products,
       if (update.tagIds != null && update.tagIds!.isNotEmpty)
         'tag_ids': update.tagIds,
-      if (update.socialLinks != null && update.socialLinks!.isNotEmpty)
-        for (final e in update.socialLinks!.entries)
-          'social_links[${e.key}]': e.value,
+      if (update.socialLinks != null) 'social_links': update.socialLinks,
     };
 
     final Object body;
     if (update.hasAvatar || update.hasLogo) {
+      // PHP/Laravel needs bracketed multipart names for array values, even
+      // when only one tag/product is selected. JSON bodies retain real lists.
       body = FormData.fromMap({
         ...fields,
+        if (update.requireComplete) 'require_complete': '1',
         if (update.hasAvatar)
           'avatar': await MultipartFile.fromFile(
             update.avatarPath!,
@@ -72,7 +74,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
             update.logoPath!,
             filename: update.logoPath!.split('/').last,
           ),
-      });
+      }, ListFormat.multiCompatible);
     } else {
       body = fields;
     }

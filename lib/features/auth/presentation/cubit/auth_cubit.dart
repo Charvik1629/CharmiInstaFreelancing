@@ -20,12 +20,15 @@ class AuthCubit extends Cubit<AuthState> {
   AuthCubit(this._repository) : super(const AuthState());
 
   final AuthRepository _repository;
+  int _sessionRevision = 0;
 
   /// Called once at startup. Uses the cached user for an instant decision, then
   /// refreshes from /auth/me in the background (without bouncing the user out on
   /// a transient network error).
   Future<void> bootstrap() async {
+    final revision = _sessionRevision;
     final hasToken = await _repository.hasToken();
+    if (revision != _sessionRevision || isClosed) return;
     if (!hasToken) {
       emit(const AuthState(status: AuthStatus.unauthenticated));
       return;
@@ -37,6 +40,7 @@ class AuthCubit extends Cubit<AuthState> {
     }
 
     final result = await _repository.me();
+    if (revision != _sessionRevision || isClosed) return;
     switch (result) {
       case Success(value: final user):
         emit(AuthState(status: AuthStatus.authenticated, user: user));
@@ -53,6 +57,7 @@ class AuthCubit extends Cubit<AuthState> {
 
   /// Persists and activates a session produced by a successful login/register.
   Future<void> onAuthenticated(AuthSession session) async {
+    ++_sessionRevision;
     await _repository.persistSession(session);
     emit(AuthState(status: AuthStatus.authenticated, user: session.user));
     // Register this device for push + open the realtime socket.
@@ -72,7 +77,14 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthState(status: AuthStatus.authenticated, user: user));
   }
 
+  /// An expired token must not call the logout endpoint again.
+  void onSessionExpired() {
+    ++_sessionRevision;
+    emit(const AuthState(status: AuthStatus.unauthenticated));
+  }
+
   Future<void> logout() async {
+    ++_sessionRevision;
     if (sl.isRegistered<PushService>()) {
       await sl<PushService>().unregister();
     }

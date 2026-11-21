@@ -6,10 +6,11 @@ enum ChatListStatus { initial, loading, loaded, empty, error }
 /// only conversations with an unread count.
 enum ChatFilter {
   all('All'),
+  offers('Offer'),
+  questions('Questions'),
+  groups('Groups'),
   unread('Unread'),
   direct('Direct'),
-  groups('Groups'),
-  questions('Questions'),
   photos('Photos'),
   videos('Videos'),
   voice('Voice'),
@@ -30,8 +31,10 @@ class ChatListState extends Equatable {
     this.errorMessage,
     this.people = const [],
     this.query = '',
+    this.filterOrder = ChatFilter.values,
   });
 
+  final List<ChatFilter> filterOrder;
   final ChatListStatus status;
   final List<Conversation> conversations;
   final ChatFilter filter;
@@ -52,6 +55,7 @@ class ChatListState extends Equatable {
   final List<User> people;
 
   ChatListState copyWith({
+    List<ChatFilter>? filterOrder,
     ChatListStatus? status,
     List<Conversation>? conversations,
     ChatFilter? filter,
@@ -64,12 +68,14 @@ class ChatListState extends Equatable {
     String? query,
   }) {
     return ChatListState(
+      filterOrder: filterOrder ?? this.filterOrder,
       status: status ?? this.status,
       conversations: conversations ?? this.conversations,
       filter: filter ?? this.filter,
       labels: labels ?? this.labels,
-      labelFilterId:
-          clearLabelFilter ? null : (labelFilterId ?? this.labelFilterId),
+      labelFilterId: clearLabelFilter
+          ? null
+          : (labelFilterId ?? this.labelFilterId),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       people: people ?? this.people,
       query: query ?? this.query,
@@ -77,6 +83,15 @@ class ChatListState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [status, conversations, filter, labels, labelFilterId, errorMessage, people, query];
+  List<Object?> get props => [
+    status,
+    conversations,
+    filter,
+    labels,
+    labelFilterId,
+    errorMessage,
+    people,
+    query,
+    filterOrder,
+  ];
 }

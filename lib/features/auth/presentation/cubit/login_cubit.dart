@@ -12,26 +12,32 @@ class LoginCubit extends Cubit<AuthFormState> {
 
   final AuthRepository _repository;
 
-  Future<void> submit(
-      {required String identifier, required String password}) async {
+  Future<void> submit({
+    required String identifier,
+    required String password,
+  }) async {
     if (state.isSubmitting) return;
     emit(const AuthFormState(status: FormStatus.submitting));
 
-    final result =
-        await _repository.login(identifier: identifier, password: password);
+    final result = await _repository.login(
+      identifier: identifier,
+      password: password,
+    );
     switch (result) {
       case Success(value: final session):
         emit(AuthFormState(status: FormStatus.success, session: session));
       case Err(failure: final failure):
-        emit(AuthFormState(
-          status: FormStatus.failure,
-          errorMessage: failure.message,
-          // 403 = account pending/rejected approval → route to approval screen.
-          forbidden: failure is ForbiddenFailure,
-          fieldErrors: failure is ValidationFailure
-              ? (failure.fieldErrors ?? const {})
-              : const {},
-        ));
+        emit(
+          AuthFormState(
+            status: FormStatus.failure,
+            errorMessage: failure.message,
+            // 403 = account pending/rejected approval → route to approval screen.
+            forbidden: failure is ForbiddenFailure,
+            fieldErrors: failure is ValidationFailure
+                ? (failure.fieldErrors ?? const {})
+                : const {},
+          ),
+        );
     }
   }
 }

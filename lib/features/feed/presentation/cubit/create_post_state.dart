@@ -10,6 +10,8 @@ class CreatePostState extends Equatable {
     this.categories = const [],
     this.title = '',
     this.body = '',
+    this.location,
+    this.locationCleared = false,
     this.selectedTypeId,
     this.imagePaths = const [],
     this.existingImageUrls = const [],
@@ -26,6 +28,8 @@ class CreatePostState extends Equatable {
 
   final String title;
   final String body;
+  final PostLocation? location;
+  final bool locationCleared;
   final int? selectedTypeId;
 
   /// Ordered list of local image paths (design: reorderable strip). The API
@@ -67,6 +71,9 @@ class CreatePostState extends Equatable {
     List<PostType>? categories,
     String? title,
     String? body,
+    PostLocation? location,
+    bool clearLocation = false,
+    bool? locationCleared,
     int? selectedTypeId,
     List<String>? imagePaths,
     List<String>? existingImageUrls,
@@ -83,6 +90,8 @@ class CreatePostState extends Equatable {
       categories: categories ?? this.categories,
       title: title ?? this.title,
       body: body ?? this.body,
+      location: clearLocation ? null : (location ?? this.location),
+      locationCleared: locationCleared ?? this.locationCleared,
       selectedTypeId: selectedTypeId ?? this.selectedTypeId,
       imagePaths: imagePaths ?? this.imagePaths,
       existingImageUrls: existingImageUrls ?? this.existingImageUrls,
@@ -97,18 +106,20 @@ class CreatePostState extends Equatable {
 
   @override
   List<Object?> get props => [
-        categoriesStatus,
-        categories,
-        title,
-        body,
-        selectedTypeId,
-        imagePaths,
-        existingImageUrls,
-        selectedTags,
-        submitStatus,
-        errorMessage,
-        fieldErrors,
-        editing,
-        created,
-      ];
+    categoriesStatus,
+    categories,
+    title,
+    body,
+    location,
+    locationCleared,
+    selectedTypeId,
+    imagePaths,
+    existingImageUrls,
+    selectedTags,
+    submitStatus,
+    errorMessage,
+    fieldErrors,
+    editing,
+    created,
+  ];
 }

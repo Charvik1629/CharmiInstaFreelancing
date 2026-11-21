@@ -82,9 +82,9 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
 
   @override
   Future<Result<void>> deleteAccount(String password) => guard(() async {
-        await _remote.deleteAccount(password);
-        await _storage.clearSession();
-      });
+    await _remote.deleteAccount(password);
+    await _storage.clearSession();
+  });
 
   @override
   Future<void> persistSession(AuthSession session) async {
@@ -126,22 +126,40 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
       guard(() => _remote.sendOtp(identifier));
 
   @override
-  Future<Result<void>> verifyOtp({required String identifier, required String code}) =>
-      guard(() => _remote.verifyOtp(identifier: identifier, code: code));
+  Future<Result<void>> verifyOtp({
+    required String identifier,
+    required String code,
+  }) => guard(() => _remote.verifyOtp(identifier: identifier, code: code));
 
   @override
   Future<Result<void>> forgotPassword(String email) =>
       guard(() => _remote.forgotPassword(email));
 
   @override
+  Future<Result<void>> resetPassword({
+    required String login,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  }) => guard(
+    () => _remote.resetPassword(
+      login: login,
+      token: token,
+      password: password,
+      passwordConfirmation: passwordConfirmation,
+    ),
+  );
+
+  @override
   Future<Result<void>> changePassword({
     required String currentPassword,
     required String password,
     required String passwordConfirmation,
-  }) =>
-      guard(() => _remote.changePassword(
-            currentPassword: currentPassword,
-            password: password,
-            passwordConfirmation: passwordConfirmation,
-          ));
+  }) => guard(
+    () => _remote.changePassword(
+      currentPassword: currentPassword,
+      password: password,
+      passwordConfirmation: passwordConfirmation,
+    ),
+  );
 }

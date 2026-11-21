@@ -1,5 +1,6 @@
 import 'package:charmi_insta_freelancing/core/error/failure.dart';
 import 'package:charmi_insta_freelancing/core/models/load.dart';
+import 'package:charmi_insta_freelancing/core/models/post_location.dart';
 import 'package:charmi_insta_freelancing/core/models/post_type.dart';
 import 'package:charmi_insta_freelancing/core/utils/result.dart';
 import 'package:charmi_insta_freelancing/features/feed/domain/entities/new_post.dart';
@@ -191,4 +192,27 @@ void main() {
       expect(calls, 1);
     });
   });
+  test('editing can remove existing location and submit an explicit clear', () async {
+    when(() => feed.updateLoad(any(), any())).thenAnswer((_) async => Success(_load(1)));
+    final cubit = build();
+    cubit.seedForEdit(const Load(id: 1, title: 'Post', location: PostLocation(18.5, 73.8)));
+    expect(cubit.state.location, isNotNull);
+    cubit.setLocation(null);
+    await cubit.submit();
+    final post = verify(() => feed.updateLoad(1, captureAny())).captured.single as NewPost;
+    expect(post.location, isNull);
+    expect(post.clearLocation, isTrue);
+    await cubit.close();
+  });
+
+  test('setting a new location cancels previous clear intent', () {
+    final cubit = build();
+    cubit.seedForEdit(const Load(id:1, title:'Post', location:PostLocation(1,2)));
+    cubit.setLocation(null);
+    cubit.setLocation(const PostLocation(3,4, label:'New warehouse'));
+    expect(cubit.state.locationCleared, isFalse);
+    expect(cubit.state.location, const PostLocation(3,4, label:'New warehouse'));
+    cubit.close();
+  });
+
 }

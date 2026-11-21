@@ -52,9 +52,9 @@ class _LoginViewState extends State<_LoginView> {
     FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() ?? false) {
       context.read<LoginCubit>().submit(
-            identifier: _email.text.trim(),
-            password: _password.text,
-          );
+        identifier: _email.text.trim(),
+        password: _password.text,
+      );
     }
   }
 
@@ -95,10 +95,14 @@ class _LoginViewState extends State<_LoginView> {
                   const SizedBox(height: AppSpacing.xxl),
                   const AuthBrandMark(),
                   const SizedBox(height: AppSpacing.xl),
-                  Text('Welcome back', style: texts.displayLarge),
+                  Text('Welcome Back!', style: texts.displayLarge),
                   const SizedBox(height: AppSpacing.xs),
-                  Text('Sign in to continue to Nexveero',
-                      style: texts.bodyLarge?.copyWith(color: nexveero.textSecondary)),
+                  Text(
+                    'Your business network is just one step away.',
+                    style: texts.bodyLarge?.copyWith(
+                      color: nexveero.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.xxl),
                   BlocBuilder<LoginCubit, AuthFormState>(
                     builder: (context, state) {
@@ -113,7 +117,8 @@ class _LoginViewState extends State<_LoginView> {
                             validator: (v) => (v == null || v.trim().isEmpty)
                                 ? 'Enter your email or username'
                                 : null,
-                            serverError: state.fieldError('login') ??
+                            serverError:
+                                state.fieldError('login') ??
                                 state.fieldError('email') ??
                                 state.fieldError('username'),
                           ),
@@ -131,7 +136,8 @@ class _LoginViewState extends State<_LoginView> {
                           const SizedBox(height: AppSpacing.md),
                           _RememberForgotRow(
                             remember: _remember,
-                            onRememberChanged: (v) => setState(() => _remember = v),
+                            onRememberChanged: (v) =>
+                                setState(() => _remember = v),
                           ),
                           const SizedBox(height: AppSpacing.xl),
                           AppButton(
@@ -148,11 +154,13 @@ class _LoginViewState extends State<_LoginView> {
                       onPressed: () => context.go(AppRoutes.register),
                       child: RichText(
                         text: TextSpan(
-                          style: texts.bodyMedium?.copyWith(color: nexveero.textSecondary),
+                          style: texts.bodyMedium?.copyWith(
+                            color: nexveero.textSecondary,
+                          ),
                           children: [
-                            const TextSpan(text: 'New here? '),
+                            const TextSpan(text: 'New to Nexveero? '),
                             TextSpan(
-                              text: 'Create account',
+                              text: 'Create Account',
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.primary,
                                 fontWeight: FontWeight.w700,
@@ -199,8 +207,10 @@ class _RememberForgotRow extends StatelessWidget {
                     : nexveero.iconInactive,
               ),
               const SizedBox(width: AppSpacing.sm),
-              Text('Remember me',
-                  style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Remember me',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ],
           ),
         ),

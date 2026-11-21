@@ -1,3 +1,4 @@
+import '../../../auth/presentation/cubit/auth_cubit.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -155,7 +156,7 @@ class _BusinessFeedViewState extends State<_BusinessFeedView> {
         leading: IconButton(
           icon: const Icon(Icons.add_box_outlined),
           tooltip: 'Create post',
-          onPressed: _createPost,
+          onPressed: context.watch<AuthCubit>().state.user?.canPost == true ? _createPost : null,
         ),
         centerTitle: true,
         title: const _GradientWordmark('Business'),

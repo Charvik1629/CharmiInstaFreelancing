@@ -29,11 +29,11 @@ class ChatLabel extends Equatable {
   }
 
   factory ChatLabel.fromJson(Map<String, dynamic> json) => ChatLabel(
-        id: json.asIntOr('id', 0),
-        name: json.asStringOr('name', ''),
-        color: json.asString('color'),
-        sortOrder: json.asIntOr('sort_order', 0),
-      );
+    id: json.asIntOr('id', 0),
+    name: json.asStringOr('name', ''),
+    color: json.asString('color'),
+    sortOrder: json.asIntOr('sort_order', 0),
+  );
 
   @override
   List<Object?> get props => [id, name, color, sortOrder];

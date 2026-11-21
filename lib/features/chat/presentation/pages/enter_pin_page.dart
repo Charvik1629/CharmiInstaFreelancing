@@ -52,9 +52,10 @@ class _EnterPinPageState extends State<EnterPinPage> {
                 clipBehavior: Clip.none,
                 children: [
                   AppAvatar(
-                      name: widget.peerName,
-                      imageUrl: MediaUrl.resolve(widget.peerAvatarUrl),
-                      size: 72),
+                    name: widget.peerName,
+                    imageUrl: MediaUrl.resolve(widget.peerAvatarUrl),
+                    size: 72,
+                  ),
                   Positioned(
                     bottom: -2,
                     right: -2,
@@ -65,11 +66,15 @@ class _EnterPinPageState extends State<EnterPinPage> {
                         color: Theme.of(context).colorScheme.surface,
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: Theme.of(context).scaffoldBackgroundColor,
-                            width: 2),
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          width: 2,
+                        ),
                       ),
-                      child: Icon(Icons.lock,
-                          size: 16, color: Theme.of(context).colorScheme.primary),
+                      child: Icon(
+                        Icons.lock,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ),
                 ],
@@ -77,9 +82,11 @@ class _EnterPinPageState extends State<EnterPinPage> {
               const SizedBox(height: AppSpacing.md),
               Text(widget.peerName, style: texts.titleLarge),
               const SizedBox(height: AppSpacing.xs),
-              Text('This chat is protected.\nEnter their 4-digit PIN to continue.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: nex.textSecondary, height: 1.5)),
+              Text(
+                'This chat is protected.\nEnter their 4-digit PIN to continue.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: nex.textSecondary, height: 1.5),
+              ),
               const SizedBox(height: AppSpacing.xl),
               // Shared 4-digit PIN cells (masked) + system numeric keyboard —
               // matches the design (no custom keypad).

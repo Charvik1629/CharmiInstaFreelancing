@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/error/failure.dart';
 import '../../../../core/models/load.dart';
+import '../../../../core/models/post_location.dart';
 import '../../../../core/models/post_type.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/utils/result.dart';
@@ -33,14 +34,17 @@ class CreatePostCubit extends Cubit<CreatePostState> {
     final existing = [
       for (final m in load.imageMedia) ?MediaUrl.resolve(m.url),
     ];
-    emit(state.copyWith(
-      title: load.title,
-      body: load.body ?? '',
-      selectedTypeId: load.postType?.id,
-      existingImageUrls: existing,
-      selectedTags: load.tags,
-      editing: true,
-    ));
+    emit(
+      state.copyWith(
+        title: load.title,
+        body: load.body ?? '',
+        location: load.location,
+        selectedTypeId: load.postType?.id,
+        existingImageUrls: existing,
+        selectedTags: load.tags,
+        editing: true,
+      ),
+    );
   }
 
   /// Fetches the categories for the picker. Failure is non-fatal — the user can
@@ -51,13 +55,16 @@ class CreatePostCubit extends Cubit<CreatePostState> {
     switch (result) {
       case Success(value: final types):
         final active = types.where((t) => t.isActive).toList();
-        emit(state.copyWith(
-          categoriesStatus: LoadStatus.loaded,
-          categories: active,
-          // Default to the first category if none picked yet.
-          selectedTypeId: state.selectedTypeId ??
-              (active.isNotEmpty ? active.first.id : null),
-        ));
+        emit(
+          state.copyWith(
+            categoriesStatus: LoadStatus.loaded,
+            categories: active,
+            // Default to the first category if none picked yet.
+            selectedTypeId:
+                state.selectedTypeId ??
+                (active.isNotEmpty ? active.first.id : null),
+          ),
+        );
       case Err():
         emit(state.copyWith(categoriesStatus: LoadStatus.error));
     }
@@ -69,6 +76,14 @@ class CreatePostCubit extends Cubit<CreatePostState> {
   void setBody(String value) => emit(state.copyWith(body: value));
 
   void selectType(int id) => emit(state.copyWith(selectedTypeId: id));
+
+  void setLocation(PostLocation? location) => emit(
+    state.copyWith(
+      location: location,
+      clearLocation: location == null,
+      locationCleared: location == null && state.editing,
+    ),
+  );
 
   void setTags(List<Tag> tags) => emit(state.copyWith(selectedTags: tags));
 
@@ -99,13 +114,14 @@ class CreatePostCubit extends Cubit<CreatePostState> {
   /// Submits the post. No-ops if already submitting or the form is invalid.
   Future<void> submit() async {
     if (state.isSubmitting || !state.canSubmit) return;
-    emit(state.copyWith(
-      submitStatus: SubmitStatus.submitting,
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(submitStatus: SubmitStatus.submitting, clearError: true),
+    );
 
     final post = NewPost(
       title: state.title.trim(),
+      location: state.location,
+      clearLocation: state.locationCleared,
       body: state.body.trim().isEmpty ? null : state.body.trim(),
       postTypeId: state.selectedTypeId,
       imagePaths: state.imagePaths,
@@ -119,11 +135,13 @@ class CreatePostCubit extends Cubit<CreatePostState> {
       case Success(value: final load):
         emit(state.copyWith(submitStatus: SubmitStatus.success, created: load));
       case Err(failure: final f):
-        emit(state.copyWith(
-          submitStatus: SubmitStatus.failure,
-          errorMessage: f.message,
-          fieldErrors: _flattenFieldErrors(f),
-        ));
+        emit(
+          state.copyWith(
+            submitStatus: SubmitStatus.failure,
+            errorMessage: f.message,
+            fieldErrors: _flattenFieldErrors(f),
+          ),
+        );
     }
   }
 

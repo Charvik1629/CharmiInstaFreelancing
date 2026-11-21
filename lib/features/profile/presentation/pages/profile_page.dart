@@ -1,5 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+
+import '../widgets/user_approvals_tile.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,7 +21,9 @@ import '../../../auth/presentation/cubit/auth_cubit.dart';
 /// and an account menu. Reads the live user from [AuthCubit], so an edit
 /// elsewhere reflects here immediately.
 class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.refresh});
+
+  final ValueListenable<int>? refresh;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +34,7 @@ class ProfilePage extends StatelessWidget {
         return Scaffold(
           body: user == null
               ? const LoadingView()
-              : _ProfileBody(user: user),
+              : _ProfileBody(user: user, refresh: refresh),
         );
       },
     );
@@ -36,7 +42,9 @@ class ProfilePage extends StatelessWidget {
 }
 
 class _ProfileBody extends StatelessWidget {
-  const _ProfileBody({required this.user});
+  const _ProfileBody({required this.user, this.refresh});
+
+  final ValueListenable<int>? refresh;
 
   final User user;
 
@@ -48,14 +56,18 @@ class _ProfileBody extends StatelessWidget {
         _ProfileHeader(user: user, onShare: () => _shareProfile(context, user)),
         Padding(
           padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, AppSpacing.xl),
+            AppSpacing.xl,
+            AppSpacing.xxl,
+            AppSpacing.xl,
+            AppSpacing.xl,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const _AccountMenu(),
               if (user.isAdmin) ...[
                 const SizedBox(height: AppSpacing.xl),
-                const _AdminMenu(),
+                _AdminMenu(refresh: refresh),
               ],
             ],
           ),
@@ -66,8 +78,11 @@ class _ProfileBody extends StatelessWidget {
 
   /// Opens the system share sheet with the profile link.
   Future<void> _shareProfile(BuildContext context, User user) async {
-    final link = user.shareUrl ??
-        (user.username != null ? 'https://nexveero.com/u/${user.username}' : null);
+    final link =
+        user.shareUrl ??
+        (user.username != null
+            ? 'https://nexveero.com/u/${user.username}'
+            : null);
     if (link == null) {
       AppOverlays.snack(context, 'No profile link available yet.');
       return;
@@ -122,7 +137,12 @@ class _ProfileHeader extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            0,
+            AppSpacing.xl,
+            0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -139,9 +159,11 @@ class _ProfileHeader extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(user.name,
-                              style: texts.titleLarge,
-                              overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            user.name,
+                            style: texts.titleLarge,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         if (user.isVerified) ...[
                           const SizedBox(width: AppSpacing.xs),
@@ -149,8 +171,11 @@ class _ProfileHeader extends StatelessWidget {
                         ],
                         if (user.isPremium) ...[
                           const SizedBox(width: 2),
-                          Icon(Icons.workspace_premium,
-                              size: 20, color: nex.warning),
+                          Icon(
+                            Icons.workspace_premium,
+                            size: 20,
+                            color: nex.warning,
+                          ),
                         ],
                       ],
                     ),
@@ -158,9 +183,12 @@ class _ProfileHeader extends StatelessWidget {
                     // "My Profile" (general): @handle · role. Business chips and
                     // the Go-Premium card live on the dedicated Business Profile
                     // page (Profile → "Business Profile"), not here.
-                    Text('${_atHandle(user)} · ${_roleLabel(user)}',
-                        style: texts.bodyMedium
-                            ?.copyWith(color: nex.textSecondary)),
+                    Text(
+                      '${_atHandle(user)} · ${_roleLabel(user)}',
+                      style: texts.bodyMedium?.copyWith(
+                        color: nex.textSecondary,
+                      ),
+                    ),
                     if ((user.bio ?? '').isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.sm),
                       Text(user.bio!, style: texts.bodyMedium),
@@ -173,7 +201,8 @@ class _ProfileHeader extends StatelessWidget {
                         Expanded(
                           child: AppButton(
                             label: 'Edit profile',
-                            onPressed: () => context.push(AppRoutes.editProfile),
+                            onPressed: () =>
+                                context.push(AppRoutes.editProfile),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.md),
@@ -227,8 +256,11 @@ class _RibbonAvatar extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: hasImage
-                ? () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => FullImageView(url: imageUrl)))
+                ? () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => FullImageView(url: imageUrl),
+                    ),
+                  )
                 : null,
             child: Container(
               width: size,
@@ -246,17 +278,23 @@ class _RibbonAvatar extends StatelessWidget {
                       width: size,
                       height: size,
                       fit: BoxFit.cover,
-                      errorWidget: (_, _, _) => Text(initials,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 26)),
-                    )
-                  : Text(initials,
-                      style: const TextStyle(
+                      errorWidget: (_, _, _) => Text(
+                        initials,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
-                          fontSize: 26)),
+                          fontSize: 26,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 26,
+                      ),
+                    ),
             ),
           ),
           if (user.isVerified || user.isPremium)
@@ -294,7 +332,9 @@ class _StatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _StatCard(value: '${user.postsCount}', label: 'Posts')),
+        Expanded(
+          child: _StatCard(value: '${user.postsCount}', label: 'Posts'),
+        ),
       ],
     );
   }
@@ -319,9 +359,12 @@ class _StatCard extends StatelessWidget {
         children: [
           Text(value, style: texts.titleMedium),
           const SizedBox(height: 2),
-          Text(label,
-              style: texts.labelSmall
-                  ?.copyWith(color: context.nexveero.textSecondary)),
+          Text(
+            label,
+            style: texts.labelSmall?.copyWith(
+              color: context.nexveero.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -414,7 +457,9 @@ class _AccountMenu extends StatelessWidget {
 
 /// Admin tools — only rendered for users with the admin role.
 class _AdminMenu extends StatelessWidget {
-  const _AdminMenu();
+  const _AdminMenu({this.refresh});
+
+  final ValueListenable<int>? refresh;
 
   @override
   Widget build(BuildContext context) {
@@ -423,11 +468,7 @@ class _AdminMenu extends StatelessWidget {
       children: [
         Text('Admin', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: AppSpacing.sm),
-        _MenuTile(
-          icon: Icons.how_to_reg_outlined,
-          title: 'User approvals',
-          onTap: () => context.push(AppRoutes.adminUsers),
-        ),
+        UserApprovalsTile(refresh: refresh),
         _MenuTile(
           icon: Icons.workspace_premium_outlined,
           title: 'Subscriptions',
@@ -459,7 +500,11 @@ class _AdminMenu extends StatelessWidget {
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({required this.icon, required this.title, required this.onTap});
+  const _MenuTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String title;

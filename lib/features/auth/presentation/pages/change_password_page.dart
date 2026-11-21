@@ -78,7 +78,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   hint: 'Enter password',
                   icon: Icons.lock_outline,
                   obscure: true,
-                  validator: (v) => Validators.required(v, field: 'Current password'),
+                  validator: (v) =>
+                      Validators.required(v, field: 'Current password'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AuthField(
@@ -101,7 +102,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   onSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                AppButton(label: 'Update password', isLoading: _submitting, onPressed: _submit),
+                AppButton(
+                  label: 'Update password',
+                  isLoading: _submitting,
+                  onPressed: _submit,
+                ),
               ],
             ),
           ),

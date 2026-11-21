@@ -53,8 +53,17 @@ abstract class AuthRepository {
   // Pending backend endpoints (see MISSING_APIS.md). Wired so the screens work
   // the moment those endpoints exist; until then they return a Failure.
   Future<Result<void>> sendOtp(String identifier);
-  Future<Result<void>> verifyOtp({required String identifier, required String code});
+  Future<Result<void>> verifyOtp({
+    required String identifier,
+    required String code,
+  });
   Future<Result<void>> forgotPassword(String email);
+  Future<Result<void>> resetPassword({
+    required String login,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  });
   Future<Result<void>> changePassword({
     required String currentPassword,
     required String password,

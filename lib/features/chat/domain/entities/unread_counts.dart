@@ -20,11 +20,11 @@ class UnreadCounts extends Equatable {
   int get inbox => chats + questions;
 
   factory UnreadCounts.fromJson(Map<String, dynamic> json) => UnreadCounts(
-        total: json.asIntOr('total', 0),
-        chats: json.asIntOr('chats', 0),
-        questions: json.asIntOr('questions', 0),
-        offers: json.asIntOr('offers', 0),
-      );
+    total: json.asIntOr('total', 0),
+    chats: json.asIntOr('chats', 0),
+    questions: json.asIntOr('questions', 0),
+    offers: json.asIntOr('offers', 0),
+  );
 
   @override
   List<Object?> get props => [total, chats, questions, offers];

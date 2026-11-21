@@ -15,8 +15,13 @@ class PasswordStrength {
     var score = 0;
     if (value.length >= 8) score++;
     if (value.length >= 12) score++;
-    if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) score++;
-    if (RegExp(r'[0-9]').hasMatch(value) && RegExp(r'[^A-Za-z0-9]').hasMatch(value)) score++;
+    if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) {
+      score++;
+    }
+    if (RegExp(r'[0-9]').hasMatch(value) &&
+        RegExp(r'[^A-Za-z0-9]').hasMatch(value)) {
+      score++;
+    }
     const labels = ['Too weak', 'Weak', 'Okay', 'Good', 'Strong password'];
     return PasswordStrength(score, labels[score.clamp(0, 4)]);
   }
@@ -54,7 +59,11 @@ class PasswordStrengthBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.md),
-          Text(s.label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color)),
+          Text(
+            s.label,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: color),
+          ),
         ],
       ),
     );

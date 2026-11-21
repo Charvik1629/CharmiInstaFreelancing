@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -36,6 +37,7 @@ class PushService {
   final ApiClient _client;
   bool _started = false;
   String? _lastToken;
+  StreamSubscription<String>? _tokenRefresh;
 
   /// Local-notifications plugin + channel so FCM messages that arrive while the
   /// app is in the FOREGROUND still appear as a system banner (Android/iOS only
@@ -96,11 +98,15 @@ class PushService {
         if (payload == null || payload.isEmpty) return;
         try {
           _route(Map<String, dynamic>.from(jsonDecode(payload) as Map));
-        } catch (_) {/* ignore malformed payload */}
+        } catch (_) {
+          /* ignore malformed payload */
+        }
       },
     );
-    final androidPlugin = _localNotifs.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _localNotifs
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await androidPlugin?.createNotificationChannel(_channel);
     await androidPlugin?.requestNotificationsPermission();
     _fcmLog('NEXVEERO-FCM [local-init] done plugin=${androidPlugin != null}');
@@ -147,9 +153,11 @@ class PushService {
 
   /// Prints the full FCM payload (notification + data) to logcat.
   static void _logPayload(String where, RemoteMessage m) {
-    _fcmLog('NEXVEERO-FCM [$where] '
-        'notification=${m.notification == null ? 'null' : '{title:${m.notification!.title}, body:${m.notification!.body}}'} '
-        'data=${m.data} messageId=${m.messageId}');
+    _fcmLog(
+      'NEXVEERO-FCM [$where] '
+      'notification=${m.notification == null ? 'null' : '{title:${m.notification!.title}, body:${m.notification!.body}}'} '
+      'data=${m.data} messageId=${m.messageId}',
+    );
   }
 
   /// After login: prompts for permission, gets the FCM token and registers this
@@ -161,9 +169,16 @@ class PushService {
     try {
       await FirebaseMessaging.instance.requestPermission();
       final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) await _register(token);
-      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
+      if (token != null) {
+        await _register(token);
+      } else {
+        _started = false;
+      }
+      _tokenRefresh ??= FirebaseMessaging.instance.onTokenRefresh.listen(
+        _register,
+      );
     } catch (e) {
+      _started = false;
       AppLogger.w('Push start failed: $e');
     }
   }
@@ -171,10 +186,15 @@ class PushService {
   /// On logout: unregisters this device's token so pushes stop for this user.
   Future<void> unregister() async {
     _started = false;
+    await _tokenRefresh?.cancel();
+    _tokenRefresh = null;
     final token = _lastToken;
     try {
       if (token != null) {
-        await _client.delete<dynamic>(ApiEndpoints.devices, data: {'token': token});
+        await _client.delete<dynamic>(
+          ApiEndpoints.devices,
+          data: {'token': token},
+        );
       }
       await FirebaseMessaging.instance.deleteToken();
     } catch (_) {
@@ -186,7 +206,6 @@ class PushService {
   /// Registers (or refreshes) the FCM token with the backend.
   Future<void> _register(String token) async {
     if (token == _lastToken) return;
-    _lastToken = token;
     try {
       await _client.post<dynamic>(
         ApiEndpoints.devices,
@@ -196,7 +215,9 @@ class PushService {
           'provider': 'fcm',
         },
       );
+      _lastToken = token;
     } catch (e) {
+      _started = false;
       AppLogger.w('Device register failed: $e');
     }
   }
@@ -269,7 +290,9 @@ class PushService {
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  _fcmLog('NEXVEERO-FCM [background] '
-      'notification=${message.notification == null ? 'null' : '{title:${message.notification!.title}, body:${message.notification!.body}}'} '
-      'data=${message.data} messageId=${message.messageId}');
+  _fcmLog(
+    'NEXVEERO-FCM [background] '
+    'notification=${message.notification == null ? 'null' : '{title:${message.notification!.title}, body:${message.notification!.body}}'} '
+    'data=${message.data} messageId=${message.messageId}',
+  );
 }

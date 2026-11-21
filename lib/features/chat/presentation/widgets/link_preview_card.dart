@@ -19,8 +19,9 @@ class LinkPreviewCard extends StatefulWidget {
 }
 
 class _LinkPreviewCardState extends State<LinkPreviewCard> {
-  late final Future<LinkPreview?> _future =
-      sl<LinkPreviewService>().fetch(widget.url);
+  late final Future<LinkPreview?> _future = sl<LinkPreviewService>().fetch(
+    widget.url,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -36,8 +37,10 @@ class _LinkPreviewCardState extends State<LinkPreviewCard> {
         return Padding(
           padding: const EdgeInsets.only(top: 6),
           child: InkWell(
-            onTap: () => launchUrl(Uri.parse(widget.url),
-                mode: LaunchMode.externalApplication),
+            onTap: () => launchUrl(
+              Uri.parse(widget.url),
+              mode: LaunchMode.externalApplication,
+            ),
             borderRadius: BorderRadius.circular(AppRadius.md),
             child: Container(
               width: 240,
@@ -65,24 +68,31 @@ class _LinkPreviewCardState extends State<LinkPreviewCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if ((p.siteName ?? '').isNotEmpty)
-                          Text(p.siteName!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 10, color: subtle)),
+                          Text(
+                            p.siteName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 10, color: subtle),
+                          ),
                         if ((p.title ?? '').isNotEmpty)
-                          Text(p.title!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: onTint)),
+                          Text(
+                            p.title!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: onTint,
+                            ),
+                          ),
                         if ((p.description ?? '').isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(p.description!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 11, color: subtle)),
+                          Text(
+                            p.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, color: subtle),
+                          ),
                         ],
                       ],
                     ),

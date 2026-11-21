@@ -13,6 +13,7 @@ class AuthInterceptor extends Interceptor {
 
   final StorageManager _storage;
   final void Function()? onUnauthorized;
+  bool _clearingSession = false;
 
   @override
   Future<void> onRequest(
@@ -32,9 +33,22 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    if (err.response?.statusCode == 401) {
-      await _storage.clearSession();
-      onUnauthorized?.call();
+    final authorization = err.requestOptions.headers['Authorization'];
+    if (err.response?.statusCode == 401 &&
+        authorization is String &&
+        !_clearingSession) {
+      _clearingSession = true;
+      try {
+        final currentToken = await _storage.readSecure(StorageKeys.authToken);
+        // Ignore failures from requests sent before a newer login completed.
+        if (currentToken != null &&
+            authorization == '${AppConstants.bearerPrefix}$currentToken') {
+          await _storage.clearSession();
+          onUnauthorized?.call();
+        }
+      } finally {
+        _clearingSession = false;
+      }
     }
     handler.next(err);
   }

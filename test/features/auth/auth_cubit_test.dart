@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:charmi_insta_freelancing/core/error/failure.dart';
@@ -12,7 +14,11 @@ class _MockAuthRepo extends Mock implements AuthRepository {}
 void main() {
   setUpAll(() {
     registerFallbackValue(
-        const AuthSession(user: User(id: 0, name: ''), token: ''));
+      const AuthSession(
+        user: User(id: 0, name: ''),
+        token: '',
+      ),
+    );
     registerFallbackValue(const User(id: 0, name: ''));
   });
 
@@ -70,19 +76,22 @@ void main() {
     expect(cubit.state.status, AuthStatus.authenticated);
   });
 
-  test('updateUser re-caches and emits the new user when authenticated', () async {
-    when(() => repo.hasToken()).thenAnswer((_) async => false);
-    when(() => repo.cacheUser(any())).thenAnswer((_) async {});
-    final cubit = AuthCubit(repo);
-    await cubit.onAuthenticated(const AuthSession(user: user, token: 't'));
+  test(
+    'updateUser re-caches and emits the new user when authenticated',
+    () async {
+      when(() => repo.hasToken()).thenAnswer((_) async => false);
+      when(() => repo.cacheUser(any())).thenAnswer((_) async {});
+      final cubit = AuthCubit(repo);
+      await cubit.onAuthenticated(const AuthSession(user: user, token: 't'));
 
-    final updated = user.copyWith(name: 'Alice B', bio: 'hi');
-    await cubit.updateUser(updated);
+      final updated = user.copyWith(name: 'Alice B', bio: 'hi');
+      await cubit.updateUser(updated);
 
-    verify(() => repo.cacheUser(updated)).called(1);
-    expect(cubit.state.user?.name, 'Alice B');
-    expect(cubit.state.user?.bio, 'hi');
-  });
+      verify(() => repo.cacheUser(updated)).called(1);
+      expect(cubit.state.user?.name, 'Alice B');
+      expect(cubit.state.user?.bio, 'hi');
+    },
+  );
 
   test('updateUser is a no-op when not authenticated', () async {
     when(() => repo.cacheUser(any())).thenAnswer((_) async {});
@@ -90,5 +99,25 @@ void main() {
     await cubit.updateUser(user);
     verifyNever(() => repo.cacheUser(any()));
     expect(cubit.state.status, AuthStatus.unknown);
+  });
+  test('late bootstrap cannot overwrite a successful login', () async {
+    final tokenCheck = Completer<bool>();
+    when(() => repo.hasToken()).thenAnswer((_) => tokenCheck.future);
+    final cubit = AuthCubit(repo);
+    final bootstrap = cubit.bootstrap();
+    await cubit.onAuthenticated(const AuthSession(user: user, token: 'new'));
+    tokenCheck.complete(false);
+    await bootstrap;
+    expect(cubit.state.status, AuthStatus.authenticated);
+    await cubit.close();
+  });
+
+  test('session expiration never calls server logout', () async {
+    final cubit = AuthCubit(repo);
+    await cubit.onAuthenticated(const AuthSession(user: user, token: 't'));
+    cubit.onSessionExpired();
+    expect(cubit.state.status, AuthStatus.unauthenticated);
+    verifyNever(() => repo.logout());
+    await cubit.close();
   });
 }

@@ -53,7 +53,8 @@ class AuthField extends StatelessWidget {
           keyboardType: keyboardType,
           textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
-          textInputAction: textInputAction ??
+          textInputAction:
+              textInputAction ??
               (onSubmitted != null
                   ? TextInputAction.done
                   : TextInputAction.next),

@@ -1,3 +1,4 @@
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emojis;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,10 +9,19 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/config/maps_config.dart';
 import '../../../../core/link_preview/link_preview_service.dart';
 import 'location_picker_page.dart';
+import 'attachment_view_page.dart';
+import 'attachment_caption_page.dart';
+import '../widgets/voice_recorder_sheet.dart';
 import 'location_view_page.dart';
 import '../widgets/link_preview_card.dart';
 import '../widgets/send_inquiry_sheet.dart';
 import '../widgets/voice_bubble.dart';
+import '../widgets/chat_emoji_sheet.dart';
+import '../widgets/message_reply_widgets.dart';
+import '../widgets/message_expiry_status.dart';
+import '../widgets/message_reaction_badge.dart';
+import '../../domain/entities/message_reaction.dart';
+import 'disappearing_messages_page.dart';
 
 import '../../../../core/di/injection.dart';
 import '../../../../core/extensions/date_extensions.dart';
@@ -24,6 +34,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/utils/result.dart';
 import '../../../../core/widgets/widgets.dart';
+import '../../../../core/widgets/message_link_text.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../groups/domain/repositories/groups_repository.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
@@ -47,7 +58,9 @@ class ChatThreadPage extends StatelessWidget {
     final meId = context.read<AuthCubit>().state.user?.id;
     return BlocProvider(
       create: (_) =>
-          ConversationCubit(sl<ChatRepository>(), conversation, meId: meId)..load(),
+          ConversationCubit(sl<ChatRepository>(), conversation, meId: meId)
+            ..load()
+            ..loadDetails(),
       child: _ThreadView(conversation: conversation, meId: meId),
     );
   }
@@ -65,6 +78,7 @@ class _ThreadView extends StatefulWidget {
 
 class _ThreadViewState extends State<_ThreadView> {
   final _input = TextEditingController();
+  final _inputFocus = FocusNode();
   final _scroll = ScrollController();
   final _picker = ImagePicker();
 
@@ -92,13 +106,15 @@ class _ThreadViewState extends State<_ThreadView> {
     if (PushService.activeConversationId == widget.conversation.id) {
       PushService.setActiveConversation(null);
     }
+    _inputFocus.dispose();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _send() async {
-    final text = _input.text;
+  Future<void> _send() => _sendText(_input.text, clearInput: true);
+
+  Future<void> _sendText(String text, {bool clearInput = false}) async {
     if (text.trim().isEmpty) return;
     final cubit = context.read<ConversationCubit>();
 
@@ -129,9 +145,12 @@ class _ThreadViewState extends State<_ThreadView> {
       }
     }
 
-    _input.clear();
+    if (cubit.state.isSending || !cubit.canSend) return;
     await cubit.send(text);
     if (!mounted) return;
+    if (clearInput && cubit.state.errorMessage == null && _input.text == text) {
+      _input.clear();
+    }
 
     // Fallback: the server rejected the send with the quota-403 (limit over and
     // not enough credits) — surface the unfunded "Broadcast message limit over"
@@ -220,12 +239,15 @@ class _ThreadViewState extends State<_ThreadView> {
   Future<void> _sendInquiry() async {
     final input = await SendInquirySheet.show(context);
     if (input == null || !mounted) return;
-    final result = await context
-        .read<ConversationCubit>()
-        .sendInquiry(input.body, input.price);
+    final result = await context.read<ConversationCubit>().sendInquiry(
+      input.body,
+      input.price,
+    );
     if (mounted && !result.isSuccess) {
       AppOverlays.snack(
-          context, result.failureOrNull?.message ?? 'Could not send inquiry');
+        context,
+        result.failureOrNull?.message ?? 'Could not send inquiry',
+      );
     }
   }
 
@@ -235,65 +257,299 @@ class _ThreadViewState extends State<_ThreadView> {
       MaterialPageRoute(builder: (_) => const LocationPickerPage()),
     );
     if (picked == null || !mounted) return;
-    final result = await context
-        .read<ConversationCubit>()
-        .sendLocation(picked.lat, picked.lng, picked.label ?? '');
+    final result = await context.read<ConversationCubit>().sendLocation(
+      picked.lat,
+      picked.lng,
+      picked.label ?? '',
+    );
     if (mounted && !result.isSuccess) {
-      AppOverlays.snack(context,
-          result.failureOrNull?.message ?? 'Could not share location');
+      AppOverlays.snack(
+        context,
+        result.failureOrNull?.message ?? 'Could not share location',
+      );
     }
   }
 
-  /// Long-press actions on the user's own message: edit (text) / delete.
-  /// The server enforces the ≤1h edit and ≤24h delete windows.
+  void _replyTo(ChatMessage message) {
+    context.read<ConversationCubit>().startReply(message);
+    _inputFocus.requestFocus();
+  }
+
+  Future<void> _react(ChatMessage message, String? emoji) async {
+    final result = await context.read<ConversationCubit>().react(
+      message,
+      emoji,
+    );
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(
+        context,
+        result.failureOrNull?.message ?? 'Could not update reaction',
+      );
+    }
+  }
+
+  Future<void> _keep(ChatMessage message) async {
+    final result = await context.read<ConversationCubit>().keepMessage(message);
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(
+        context,
+        result.failureOrNull?.message ?? 'Could not keep message',
+      );
+    }
+  }
+
+  Future<String?> _pickReaction() => showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(ctx).height * .55,
+        child: emojis.EmojiPicker(
+          onEmojiSelected: (_, emoji) => Navigator.pop(ctx, emoji.emoji),
+          config: emojis.Config(
+            height: null,
+            emojiViewConfig: emojis.EmojiViewConfig(
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
+            ),
+            categoryViewConfig: emojis.CategoryViewConfig(
+              initCategory: emojis.Category.SMILEYS,
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
+            ),
+            searchViewConfig: emojis.SearchViewConfig(
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Future<void> _messageActions(ChatMessage msg) async {
+    _inputFocus.unfocus();
     final mine = msg.isMine(widget.meId);
+    final active = msg.canInteract && !msg.hasExpired();
+    final canSend = context.read<ConversationCubit>().canSend;
     final action = await AppOverlays.sheet<String>(
       context,
       builder: (sheetCtx) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            leading: Icon(msg.isStarred ? Icons.star : Icons.star_border),
-            title: Text(msg.isStarred ? 'Unstar' : 'Star'),
-            onTap: () => Navigator.of(sheetCtx).pop('star'),
-          ),
+          if (active && canSend && !widget.conversation.isBroadcast)
+            Wrap(
+              spacing: 2,
+              children: [
+                for (final emoji in ['👍', '❤️', '😂', '😮', '😢', '🙏'])
+                  IconButton(
+                    constraints: const BoxConstraints.tightFor(
+                      width: 40,
+                      height: 44,
+                    ),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'React $emoji',
+                    onPressed: () => Navigator.pop(sheetCtx, 'reaction:$emoji'),
+                    icon: Text(emoji, style: const TextStyle(fontSize: 24)),
+                    style: IconButton.styleFrom(
+                      backgroundColor: msg.myReaction == emoji
+                          ? Theme.of(sheetCtx).colorScheme.primaryContainer
+                          : null,
+                    ),
+                  ),
+                IconButton(
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: 'More reactions',
+                  onPressed: () => Navigator.pop(sheetCtx, 'reaction:more'),
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          if (active && canSend && !widget.conversation.isBroadcast)
+            ListTile(
+              leading: const Icon(Icons.reply),
+              title: const Text('Reply'),
+              onTap: () => Navigator.pop(sheetCtx, 'reply'),
+            ),
+          if (active)
+            ListTile(
+              leading: Icon(msg.isStarred ? Icons.star : Icons.star_border),
+              title: Text(msg.isStarred ? 'Unstar' : 'Star'),
+              onTap: () => Navigator.pop(sheetCtx, 'star'),
+            ),
+          if (active && msg.expiresAt != null && !msg.isKept && canSend)
+            ListTile(
+              leading: const Icon(Icons.bookmark_border),
+              title: const Text('Keep'),
+              onTap: () => Navigator.pop(sheetCtx, 'keep'),
+            ),
           if (mine &&
+              active &&
+              canSend &&
               (msg.body ?? '').isNotEmpty &&
               !msg.hasImage &&
               !msg.hasFileAttachment)
             ListTile(
               leading: const Icon(Icons.edit_outlined),
               title: const Text('Edit'),
-              onTap: () => Navigator.of(sheetCtx).pop('edit'),
+              onTap: () => Navigator.pop(sheetCtx, 'edit'),
             ),
-          if (mine)
+          if (!widget.conversation.isBroadcast)
             ListTile(
-              leading: Icon(Icons.delete_outline,
-                  color: Theme.of(sheetCtx).colorScheme.error),
-              title: Text('Delete',
-                  style: TextStyle(color: Theme.of(sheetCtx).colorScheme.error)),
-              onTap: () => Navigator.of(sheetCtx).pop('delete'),
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(sheetCtx).colorScheme.error,
+              ),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(sheetCtx, 'delete'),
             ),
         ],
       ),
     );
     if (action == null || !mounted) return;
-    if (action == 'star') {
+    if (action.startsWith('reaction:')) {
+      final value = action.substring('reaction:'.length);
+      final emoji = value == 'more' ? await _pickReaction() : value;
+      if (emoji != null && mounted) {
+        await _react(msg, emoji);
+      }
+    } else if (action == 'reply') {
+      _replyTo(msg);
+    } else if (action == 'keep') {
+      await _keep(msg);
+    } else if (action == 'star') {
       final result = await context.read<ConversationCubit>().toggleStar(msg);
       if (mounted && !result.isSuccess) {
-        AppOverlays.snack(context,
-            result.failureOrNull?.message ?? 'Could not update star');
+        AppOverlays.snack(
+          context,
+          result.failureOrNull?.message ?? 'Could not update star',
+        );
       }
     } else if (action == 'edit') {
       await _editMessage(msg);
     } else if (action == 'delete') {
-      final result = await context.read<ConversationCubit>().deleteMessage(msg.id);
-      if (mounted && !result.isSuccess) {
-        AppOverlays.snack(context,
-            result.failureOrNull?.message ?? 'Could not delete message');
-      }
+      await _deleteMessage(msg);
     }
+  }
+
+  Future<void> _deleteMessage(ChatMessage msg) async {
+    final canDeleteEveryone =
+        msg.isMine(widget.meId) &&
+        !msg.isDeleted &&
+        !msg.isSystem &&
+        (msg.createdAt == null ||
+            DateTime.now().difference(msg.createdAt!) <=
+                const Duration(hours: 24));
+    final scope = await AppOverlays.sheet<MessageDeleteScope>(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('Delete message?'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Delete for me'),
+            subtitle: const Text('Other participants keep the message.'),
+            onTap: () => Navigator.pop(ctx, MessageDeleteScope.me),
+          ),
+          if (canDeleteEveryone)
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete for everyone'),
+              subtitle: const Text(
+                'Removes your message for all participants.',
+              ),
+              onTap: () => Navigator.pop(ctx, MessageDeleteScope.everyone),
+            ),
+          ListTile(
+            title: const Text('Cancel'),
+            onTap: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+    if (scope == null || !mounted) return;
+    final result = await context.read<ConversationCubit>().deleteMessage(
+      msg.id,
+      scope: scope,
+    );
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(
+        context,
+        result.failureOrNull?.message ?? 'Could not delete message',
+      );
+    }
+  }
+
+  Future<void> _openContactInfo() async {
+    final cubit = context.read<ConversationCubit>();
+    await context.push(AppRoutes.contactInfo, extra: widget.conversation);
+    if (mounted) await cubit.loadDetails();
+  }
+
+  Future<void> _openTimer() async {
+    final cubit = context.read<ConversationCubit>();
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => DisappearingMessagesPage(
+          repository: sl<ChatRepository>(),
+          initial: cubit.state.disappearing,
+          onApply: cubit.setDisappearing,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteChat() async {
+    final ok = await AppOverlays.confirm(
+      context,
+      title: 'Delete this chat?',
+      message: 'This removes the chat and its history for you. Other participants keep their messages.',
+      confirmLabel: 'Delete for me',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final result = await context.read<ConversationCubit>().deleteChat();
+    if (mounted && !result.isSuccess) {
+      AppOverlays.snack(
+        context,
+        result.failureOrNull?.message ?? 'Could not delete chat',
+      );
+    }
+  }
+
+  void _showReactions(ChatMessage message) {
+    AppOverlays.sheet<void>(
+      context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(title: Text('Reactions')),
+          for (final reaction in message.reactions)
+            for (final user in reaction.users)
+              ListTile(
+                leading: Text(
+                  reaction.emoji,
+                  style: const TextStyle(fontSize: 24),
+                ),
+                title: Text(user.id == widget.meId ? 'You' : user.name),
+              ),
+          if (message.myReaction != null)
+            ListTile(
+              leading: const Icon(Icons.remove_circle_outline),
+              title: const Text('Remove my reaction'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _react(message, null);
+              },
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _editMessage(ChatMessage msg) async {
@@ -302,15 +558,15 @@ class _ThreadViewState extends State<_ThreadView> {
       context: context,
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Edit message',
-                  style: Theme.of(ctx).textTheme.titleLarge),
+              Text('Edit message', style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: AppSpacing.lg),
               AppTextField(
                 controller: controller,
@@ -343,10 +599,15 @@ class _ThreadViewState extends State<_ThreadView> {
       ),
     );
     if (body == null || body.isEmpty || !mounted) return;
-    final result = await context.read<ConversationCubit>().editMessage(msg.id, body);
+    final result = await context.read<ConversationCubit>().editMessage(
+      msg.id,
+      body,
+    );
     if (mounted && !result.isSuccess) {
       AppOverlays.snack(
-          context, result.failureOrNull?.message ?? 'Could not edit message');
+        context,
+        result.failureOrNull?.message ?? 'Could not edit message',
+      );
     }
   }
 
@@ -355,22 +616,27 @@ class _ThreadViewState extends State<_ThreadView> {
     try {
       if (source == ImageSource.gallery) {
         // Photo Picker needs no permission; allows multiple (up to 5).
-        final files =
-            await _picker.pickMultiImage(maxWidth: 1600, imageQuality: 85);
+        final files = await _picker.pickMultiImage(
+          maxWidth: 1600,
+          imageQuality: 85,
+        );
         final paths = files.map((f) => f.path).take(5).toList();
         if (paths.isNotEmpty) {
-          cubit.sendAttachments(paths, caption: _input.text.trim());
-          _input.clear();
+          await _confirmAttachments(cubit, paths);
         }
       } else {
-        final outcome =
-            await PermissionFlow.ensure(context, AppPermission.camera);
+        final outcome = await PermissionFlow.ensure(
+          context,
+          AppPermission.camera,
+        );
         if (!outcome.isUsable) return;
         final file = await _picker.pickImage(
-            source: ImageSource.camera, maxWidth: 1600, imageQuality: 85);
+          source: ImageSource.camera,
+          maxWidth: 1600,
+          imageQuality: 85,
+        );
         if (file != null) {
-          cubit.sendImage(file.path, caption: _input.text.trim());
-          _input.clear();
+          await _confirmAttachments(cubit, [file.path]);
         }
       }
     } catch (_) {
@@ -385,8 +651,7 @@ class _ThreadViewState extends State<_ThreadView> {
     try {
       final file = await _picker.pickVideo(source: ImageSource.gallery);
       if (file != null) {
-        cubit.sendAttachment(file.path, caption: _input.text.trim());
-        _input.clear();
+        await _confirmAttachments(cubit, [file.path]);
       }
     } catch (_) {
       if (mounted) AppOverlays.snack(context, 'Could not attach video');
@@ -396,21 +661,55 @@ class _ThreadViewState extends State<_ThreadView> {
   Future<void> _pickDocument() async {
     final cubit = context.read<ConversationCubit>();
     try {
-      final files = await FilePicker.pickFiles(allowMultiple: true);
-      final paths = [
-        for (final f in files) ?f.path,
-      ].take(5).toList();
+      final files = await FilePicker.pickFiles();
+      final paths = [for (final f in files) ?f.path].take(5).toList();
       if (paths.isNotEmpty) {
-        cubit.sendAttachments(paths, caption: _input.text.trim());
-        _input.clear();
+        await _confirmAttachments(cubit, paths);
       }
     } catch (_) {
       if (mounted) AppOverlays.snack(context, 'Could not attach file');
     }
   }
 
-  void _voiceComingSoon() =>
-      AppOverlays.snack(context, 'Voice messages coming soon.');
+  Future<void> _confirmAttachments(
+    ConversationCubit cubit,
+    List<String> paths,
+  ) async {
+    if (!mounted || !cubit.canSend) return;
+    final originalText = _input.text;
+    var currentPaths = paths;
+    var currentCaption = originalText.trim();
+    while (mounted) {
+      final draft = await Navigator.of(context).push<AttachmentDraft>(
+        MaterialPageRoute(
+          builder: (_) => AttachmentCaptionPage(
+            paths: currentPaths,
+            initial: currentCaption,
+          ),
+        ),
+      );
+      if (draft == null || !mounted) return;
+      await cubit.sendAttachments(draft.paths, caption: draft.caption);
+      if (!mounted) return;
+      if (cubit.state.errorMessage == null) {
+        if (_input.text == originalText) _input.clear();
+        return;
+      }
+      currentPaths = draft.paths;
+      currentCaption = draft.caption;
+    }
+  }
+
+  Future<void> _voiceComingSoon() async {
+    final cubit = context.read<ConversationCubit>();
+    final path = await showModalBottomSheet<String>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => const VoiceRecorderSheet(),
+    );
+    if (path != null && mounted) await cubit.sendAttachment(path);
+  }
 
   /// Fetches the linked post and opens its detail (from a question/offer chat).
   Future<void> _viewPost(BuildContext context, int loadId) async {
@@ -440,7 +739,10 @@ class _ThreadViewState extends State<_ThreadView> {
       }
       if (!context.mounted) return;
       if (ok) setState(() => _labels = const []);
-      AppOverlays.snack(context, ok ? 'Label removed' : 'Could not remove label');
+      AppOverlays.snack(
+        context,
+        ok ? 'Label removed' : 'Could not remove label',
+      );
       return;
     }
 
@@ -457,11 +759,8 @@ class _ThreadViewState extends State<_ThreadView> {
     }
     final updated = await AppOverlays.sheet<List<ChatLabel>>(
       context,
-      builder: (_) => _ThreadLabelSheet(
-        conversation: c,
-        labels: labels,
-        attached: _labels,
-      ),
+      builder: (_) =>
+          _ThreadLabelSheet(conversation: c, labels: labels, attached: _labels),
     );
     if (updated != null && mounted) {
       setState(() => _labels = updated);
@@ -470,7 +769,9 @@ class _ThreadViewState extends State<_ThreadView> {
 
   /// Fetches the group by id and opens its Group details screen.
   Future<void> _openGroupInfo(BuildContext context, int groupId) async {
-    final result = await AppLoader.run(sl<GroupsRepository>().getGroup(groupId));
+    final result = await AppLoader.run(
+      sl<GroupsRepository>().getGroup(groupId),
+    );
     if (!context.mounted) return;
     switch (result) {
       case Success(value: final group):
@@ -488,213 +789,354 @@ class _ThreadViewState extends State<_ThreadView> {
       ConversationType.group => 'Group',
       ConversationType.direct => null,
     };
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: GestureDetector(
-          onTap: c.isBroadcast
-              ? () => context.push(AppRoutes.broadcastDetail, extra: c.id)
-              : () => context.push(AppRoutes.contactInfo, extra: c),
-          child: Row(
-          children: [
-            AppAvatar(
-                name: c.title,
-                imageUrl: MediaUrl.resolve(c.avatarUrl),
-                size: 36,
-                enlargeOnTap: true),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
+    return BlocListener<ConversationCubit, ConversationState>(
+      listenWhen: (p, n) =>
+          p.chatDeleted != n.chatDeleted || p.errorMessage != n.errorMessage,
+      listener: (ctx, state) {
+        if (state.chatDeleted) {
+          ctx.pop('deleted');
+        } else if (state.errorMessage != null) {
+          AppOverlays.snack(ctx, state.errorMessage!);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 0,
+          title: GestureDetector(
+            onTap: c.isBroadcast
+                ? () => context.push(AppRoutes.broadcastDetail, extra: c.id)
+                : _openContactInfo,
+            child: Row(
+              children: [
+                AppAvatar(
+                  name: c.title,
+                  imageUrl: MediaUrl.resolve(c.avatarUrl),
+                  size: 36,
+                  enlargeOnTap: true,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(
-                        child: Text(c.title,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              c.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          // A colored dot per applied label.
+                          for (final l in _labels) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: l.colorValue(
+                                  Theme.of(context).colorScheme.primary,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      // Live subtitle: typing… › Online › last seen › static label.
+                      BlocBuilder<ConversationCubit, ConversationState>(
+                        buildWhen: (p, c) =>
+                            p.typingName != c.typingName ||
+                            p.peerOnline != c.peerOnline ||
+                            p.peerLastSeen != c.peerLastSeen ||
+                            p.disappearing != c.disappearing,
+                        builder: (context, s) {
+                          String? line;
+                          Color? color;
+                          if (s.typingName != null) {
+                            line = 'typing…';
+                            color = Theme.of(context).colorScheme.primary;
+                          } else if (s.disappearing.enabled) {
+                            line =
+                                'Disappears in ${s.disappearing.displayLabel}';
+                            color = Theme.of(context).colorScheme.primary;
+                          } else if (c.type == ConversationType.direct &&
+                              s.peerOnline) {
+                            line = 'Online';
+                            color = context.nexveero.success;
+                          } else if (c.type == ConversationType.direct &&
+                              s.peerLastSeen != null) {
+                            line = 'last seen ${s.peerLastSeen!.timeAgo}';
+                            color = context.nexveero.textSecondary;
+                          } else {
+                            line = subtitle;
+                            color = context.nexveero.textSecondary;
+                          }
+                          if (line == null) return const SizedBox.shrink();
+                          return Text(
+                            line,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: color),
+                          );
+                        },
                       ),
-                      // A colored dot per applied label.
-                      for (final l in _labels) ...[
-                        const SizedBox(width: 5),
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: l.colorValue(
-                                Theme.of(context).colorScheme.primary),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
-                  // Live subtitle: typing… › Online › last seen › static label.
-                  BlocBuilder<ConversationCubit, ConversationState>(
-                    buildWhen: (p, c) =>
-                        p.typingName != c.typingName ||
-                        p.peerOnline != c.peerOnline ||
-                        p.peerLastSeen != c.peerLastSeen,
-                    builder: (context, s) {
-                      String? line;
-                      Color? color;
-                      if (s.typingName != null) {
-                        line = 'typing…';
-                        color = Theme.of(context).colorScheme.primary;
-                      } else if (c.type == ConversationType.direct &&
-                          s.peerOnline) {
-                        line = 'Online';
-                        color = context.nexveero.success;
-                      } else if (c.type == ConversationType.direct &&
-                          s.peerLastSeen != null) {
-                        line = 'last seen ${s.peerLastSeen!.timeAgo}';
-                        color = context.nexveero.textSecondary;
-                      } else {
-                        line = subtitle;
-                        color = context.nexveero.textSecondary;
-                      }
-                      if (line == null) return const SizedBox.shrink();
-                      return Text(line,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(color: color));
-                    },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (!c.isBroadcast)
+              PopupMenuButton<String>(
+                tooltip: 'Chat options',
+                onSelected: (action) {
+                  if (action == 'timer') _openTimer();
+                  if (action == 'delete') _deleteChat();
+                },
+                itemBuilder: (_) => [
+                  if (context.read<ConversationCubit>().canSend)
+                    const PopupMenuItem(
+                      value: 'timer',
+                      child: Text('Disappearing messages'),
+                    ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete chat'),
                   ),
                 ],
               ),
-            ),
+            // Question/offer chats link to a post — let the user open it.
+            if (c.loadId != null)
+              IconButton(
+                icon: const Icon(Icons.receipt_long_outlined),
+                tooltip: 'View post',
+                onPressed: () => _viewPost(context, c.loadId!),
+              ),
+            if (!c.isBroadcast)
+              IconButton(
+                icon: Icon(
+                  _labels.isEmpty
+                      ? Icons.label_outline
+                      : Icons.label_off_outlined,
+                ),
+                tooltip: _labels.isEmpty ? 'Manage labels' : 'Remove label',
+                onPressed: () => _manageLabels(context, c),
+              ),
+            if (c.type == ConversationType.direct)
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Contact info',
+                onPressed: _openContactInfo,
+              )
+            else if (c.type == ConversationType.group && c.groupId != null)
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Group info',
+                onPressed: () => _openGroupInfo(context, c.groupId!),
+              ),
           ],
-          ),
         ),
-        actions: [
-          // Question/offer chats link to a post — let the user open it.
-          if (c.loadId != null)
-            IconButton(
-              icon: const Icon(Icons.receipt_long_outlined),
-              tooltip: 'View post',
-              onPressed: () => _viewPost(context, c.loadId!),
+        body: Container(
+          // WhatsApp-style doodle background behind the thread (per theme).
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                Theme.of(context).brightness == Brightness.dark
+                    ? 'assets/chat/chat_bg_dark.jpg'
+                    : 'assets/chat/chat_bg_light.jpg',
+              ),
+              fit: BoxFit.cover,
+              repeat: ImageRepeat.repeat,
             ),
-          if (!c.isBroadcast)
-            IconButton(
-              icon: Icon(_labels.isEmpty
-                  ? Icons.label_outline
-                  : Icons.label_off_outlined),
-              tooltip: _labels.isEmpty ? 'Manage labels' : 'Remove label',
-              onPressed: () => _manageLabels(context, c),
-            ),
-          if (c.type == ConversationType.direct)
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              tooltip: 'Contact info',
-              onPressed: () => context.push(AppRoutes.contactInfo, extra: c),
-            )
-          else if (c.type == ConversationType.group && c.groupId != null)
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              tooltip: 'Group info',
-              onPressed: () => _openGroupInfo(context, c.groupId!),
-            ),
-        ],
-      ),
-      body: Container(
-        // WhatsApp-style doodle background behind the thread (per theme).
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(
-              Theme.of(context).brightness == Brightness.dark
-                  ? 'assets/chat/chat_bg_dark.jpg'
-                  : 'assets/chat/chat_bg_light.jpg',
-            ),
-            fit: BoxFit.cover,
-            repeat: ImageRepeat.repeat,
           ),
-        ),
-        child: Column(
-        children: [
-          if (c.isBroadcast) const _BroadcastNotice(),
-          Expanded(
-            child: BlocBuilder<ConversationCubit, ConversationState>(
-              builder: (context, state) {
-                switch (state.status) {
-                  case ThreadStatus.loading:
-                  case ThreadStatus.initial:
-                    return const LoadingView();
-                  case ThreadStatus.error:
-                    return ErrorView(
-                      message: state.errorMessage ?? 'Could not load messages',
-                      onRetry: () => context.read<ConversationCubit>().load(),
+          child: Column(
+            children: [
+              if (c.isBroadcast) const _BroadcastNotice(),
+              if (!c.isBroadcast)
+                BlocBuilder<ConversationCubit, ConversationState>(
+                  buildWhen: (p, n) => p.disappearing != n.disappearing,
+                  builder: (ctx, state) {
+                    if (!state.disappearing.enabled) {
+                      return const SizedBox.shrink();
+                    }
+                    return Material(
+                      color: Theme.of(ctx).colorScheme.primaryContainer
+                          .withValues(alpha: .7),
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.timer_outlined, size: 20),
+                        title: Text(
+                          'New messages disappear after ${state.disappearing.displayLabel}, except when kept.',
+                        ),
+                        onTap: context.read<ConversationCubit>().canSend
+                            ? _openTimer
+                            : null,
+                      ),
                     );
-                  case ThreadStatus.empty:
-                    return const EmptyView(
-                      title: 'No messages yet',
-                      subtitle: 'Say hello 👋',
-                      icon: Icons.chat_bubble_outline,
-                    );
-                  case ThreadStatus.loaded:
-                    // Interleave day separators (design/web: "Today").
-                    final items = _chatItems(state.messages);
-                    final count = items.length;
-                    return ListView.builder(
-                      controller: _scroll,
-                      // Reversed so the newest message sits at the bottom and the
-                      // view stays pinned there when the keyboard opens.
-                      reverse: true,
-                      padding: const EdgeInsets.all(AppSpacing.lg),
-                      itemCount: count + (state.isLoadingMore ? 1 : 0),
-                      itemBuilder: (context, i) {
-                        // The loader for older messages sits at the very top,
-                        // which in a reversed list is the last builder index.
-                        if (state.isLoadingMore && i == count) {
-                          return const Padding(
-                            padding: EdgeInsets.all(AppSpacing.sm),
-                            child: Center(
-                                child: SizedBox(
+                  },
+                ),
+              Expanded(
+                child: BlocBuilder<ConversationCubit, ConversationState>(
+                  builder: (context, state) {
+                    switch (state.status) {
+                      case ThreadStatus.loading:
+                      case ThreadStatus.initial:
+                        return const LoadingView();
+                      case ThreadStatus.error:
+                        return ErrorView(
+                          message:
+                              state.errorMessage ?? 'Could not load messages',
+                          onRetry: () =>
+                              context.read<ConversationCubit>().load(),
+                        );
+                      case ThreadStatus.empty:
+                        return const EmptyView(
+                          title: 'No messages yet',
+                          subtitle: 'Say hello 👋',
+                          icon: Icons.chat_bubble_outline,
+                        );
+                      case ThreadStatus.loaded:
+                        // Interleave day separators (design/web: "Today").
+                        final items = _chatItems(state.messages);
+                        final count = items.length;
+                        return ListView.builder(
+                          controller: _scroll,
+                          // Reversed so the newest message sits at the bottom and the
+                          // view stays pinned there when the keyboard opens.
+                          reverse: true,
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          itemCount: count + (state.isLoadingMore ? 1 : 0),
+                          itemBuilder: (context, i) {
+                            // The loader for older messages sits at the very top,
+                            // which in a reversed list is the last builder index.
+                            if (state.isLoadingMore && i == count) {
+                              return const Padding(
+                                padding: EdgeInsets.all(AppSpacing.sm),
+                                child: Center(
+                                  child: SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2))),
-                          );
-                        }
-                        // index 0 → newest (bottom); higher indices → older.
-                        final item = items[count - 1 - i];
-                        if (item is _DateItem) {
-                          return _DateSeparator(date: item.date);
-                        }
-                        final msg = (item as _MsgItem).message;
-                        // Server event lines render as a centered banner.
-                        if (msg.isSystem) return _SystemLine(text: msg.body ?? '');
-                        final mine = msg.isMine(widget.meId);
-                        return GestureDetector(
-                          onLongPress: (!msg.isOrder && !msg.isSystem)
-                              ? () => _messageActions(msg)
-                              : null,
-                          child: _Bubble(
-                            message: msg,
-                            mine: mine,
-                            readByPeer: mine &&
-                                state.peerLastReadAt != null &&
-                                msg.createdAt != null &&
-                                !msg.createdAt!.isAfter(state.peerLastReadAt!),
-                            showSender:
-                                widget.conversation.type == ConversationType.group,
-                          ),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            // index 0 → newest (bottom); higher indices → older.
+                            final item = items[count - 1 - i];
+                            if (item is _DateItem) {
+                              return _DateSeparator(date: item.date);
+                            }
+                            final msg = (item as _MsgItem).message;
+                            // Server event lines render as a centered banner.
+                            if (msg.isSystem) {
+                              return _SystemLine(text: msg.body ?? '');
+                            }
+                            final mine = msg.isMine(widget.meId);
+                            final canReply =
+                                context.read<ConversationCubit>().canSend &&
+                                !c.isBroadcast &&
+                                msg.canInteract &&
+                                !msg.hasExpired();
+                            return SwipeToReply(
+                              key: ValueKey('message-${msg.id}'),
+                              onReply: canReply ? () => _replyTo(msg) : null,
+                              child: GestureDetector(
+                                onLongPress:
+                                    !msg.isOrder &&
+                                        (!msg.isSystem || msg.isDeleted)
+                                    ? () => _messageActions(msg)
+                                    : null,
+                                child: Column(
+                                  crossAxisAlignment: mine
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    _Bubble(
+                                      message: msg,
+                                      mine: mine,
+                                      meId: widget.meId,
+                                      onReactions: () => _showReactions(msg),
+                                      readByPeer:
+                                          mine &&
+                                          state.peerLastReadAt != null &&
+                                          msg.createdAt != null &&
+                                          !msg.createdAt!.isAfter(
+                                            state.peerLastReadAt!,
+                                          ),
+                                      showSender:
+                                          c.type == ConversationType.group,
+                                    ),
+                                    if (!msg.isDeleted)
+                                      ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth:
+                                              MediaQuery.sizeOf(context).width *
+                                              .8,
+                                        ),
+                                        child: Wrap(
+                                          spacing: 4,
+                                          children: [
+                                            if (msg.expiresAt != null ||
+                                                msg.isKept)
+                                              MessageExpiryStatus(
+                                                message: msg,
+                                                onKeep:
+                                                    state.changingMessages
+                                                            .contains(msg.id) ||
+                                                        !context
+                                                            .read<
+                                                              ConversationCubit
+                                                            >()
+                                                            .canSend
+                                                    ? null
+                                                    : () => _keep(msg),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         );
-                      },
-                    );
-                }
-              },
-            ),
+                    }
+                  },
+                ),
+              ),
+              BlocBuilder<ConversationCubit, ConversationState>(
+                buildWhen: (p, n) => p.replyingTo != n.replyingTo,
+                builder: (ctx, state) => state.replyingTo == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                        child: MessageQuote(
+                          reply: MessageReply.fromMessage(state.replyingTo!),
+                          meId: widget.meId,
+                          onCancel: () =>
+                              ctx.read<ConversationCubit>().cancelReply(),
+                        ),
+                      ),
+              ),
+              _Composer(
+                focusNode: _inputFocus,
+                controller: _input,
+                conversation: c,
+                onSend: _send,
+                onQuickReply: (text) => _sendText(text),
+                onAttach: _openAttachSheet,
+                onVoice: _voiceComingSoon,
+              ),
+            ],
           ),
-          _Composer(
-            controller: _input,
-            conversation: c,
-            onSend: _send,
-            onAttach: _openAttachSheet,
-            onVoice: _voiceComingSoon,
-          ),
-        ],
         ),
       ),
     );
@@ -702,19 +1144,39 @@ class _ThreadViewState extends State<_ThreadView> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble(
-      {required this.message,
-      required this.mine,
-      required this.showSender,
-      this.readByPeer = false});
+  const _Bubble({
+    required this.message,
+    required this.mine,
+    required this.showSender,
+    this.readByPeer = false,
+    this.meId,
+    this.onReactions,
+  });
 
   final ChatMessage message;
   final bool mine;
   final bool showSender;
   final bool readByPeer;
+  final int? meId;
+  final VoidCallback? onReactions;
 
   @override
   Widget build(BuildContext context) {
+    if (message.isDeleted) {
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Text(
+            'This message was deleted',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
     // Order messages render as a distinct order card (design "Chat · Order cards").
     if (message.isOrder) {
       return _OrderCard(order: message.order!);
@@ -726,9 +1188,14 @@ class _Bubble extends StatelessWidget {
       bottomRight: Radius.circular(mine ? 4 : 16),
     );
     final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.72,
+      ),
       margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         // Soft solid purple for my bubbles — calmer than the brand gradient and
         // easier on the eyes over the chat background (works in light + dark).
@@ -741,18 +1208,34 @@ class _Bubble extends StatelessWidget {
           if (showSender && !mine && (message.senderName ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: Text(message.senderName!,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: mine ? Colors.white70 : context.nexveero.textSecondary,
-                      fontWeight: FontWeight.w700)),
+              child: Text(
+                message.senderName!,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: mine ? Colors.white70 : context.nexveero.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          if (message.replyTo != null || message.replyToMessageId != null)
+            MessageQuote(
+              reply:
+                  message.replyTo ??
+                  MessageReply(
+                    id: message.replyToMessageId!,
+                    body: 'Message unavailable',
+                  ),
+              meId: meId,
+              inBubble: mine,
             ),
           if (message.hasImage)
             GestureDetector(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                fullscreenDialog: true,
-                builder: (_) =>
-                    FullImageView(url: MediaUrl.resolve(message.imageUrl)!),
-              )),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  fullscreenDialog: true,
+                  builder: (_) =>
+                      FullImageView(url: MediaUrl.resolve(message.imageUrl)!),
+                ),
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.network(
@@ -760,16 +1243,20 @@ class _Bubble extends StatelessWidget {
                   width: 200,
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => const SizedBox(
-                      height: 140,
-                      width: 200,
-                      child: ImagePlaceholder(role: PlaceholderRole.post)),
+                    height: 140,
+                    width: 200,
+                    child: ImagePlaceholder(role: PlaceholderRole.post),
+                  ),
                 ),
               ),
             ),
           // Voice/audio → in-app player; other files → chip.
           if (message.attachmentKind == 'audio' &&
               (message.attachmentUrl?.isNotEmpty ?? false))
-            VoiceBubble(url: MediaUrl.resolve(message.attachmentUrl)!, mine: mine)
+            VoiceBubble(
+              url: MediaUrl.resolve(message.attachmentUrl)!,
+              mine: mine,
+            )
           else if (message.hasFileAttachment)
             _FileChip(message: message, mine: mine),
           // Location card (type: location) — pin + label, opens a maps app.
@@ -782,35 +1269,49 @@ class _Bubble extends StatelessWidget {
           else if (message.isOffer)
             _OfferCard(message: message, mine: mine)
           else if ((message.body ?? '').isNotEmpty)
-            Text(message.body!,
-                style: TextStyle(color: mine ? Colors.white : null)),
+            MessageLinkText(
+              text: message.body!,
+              style: TextStyle(color: mine ? Colors.white : null),
+            ),
           if (LinkPreviewService.firstUrl(message.body) case final url?
               when !message.isInquiry && !message.isOffer)
             LinkPreviewCard(url: url, mine: mine),
           const SizedBox(height: 2),
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.max,
             children: [
               if (message.isStarred) ...[
-                Icon(Icons.star,
-                    size: 11,
-                    color: mine ? Colors.white70 : context.nexveero.warning),
+                Icon(
+                  Icons.star,
+                  size: 11,
+                  color: mine ? Colors.white70 : context.nexveero.warning,
+                ),
                 const SizedBox(width: 3),
               ],
+              if (message.editedAt != null)
+                Text(
+                  'edited · ',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: mine ? Colors.white70 : null,
+                  ),
+                ),
               Text(
                 message.createdAt?.clockTime ?? '',
                 style: TextStyle(
-                    fontSize: 10,
-                    color:
-                        mine ? Colors.white70 : context.nexveero.textSecondary),
+                  fontSize: 10,
+                  color: mine ? Colors.white70 : context.nexveero.textSecondary,
+                ),
               ),
               if (mine) ...[
                 const SizedBox(width: 3),
                 // Delivered = grey double-tick; read = blue double-tick.
-                Icon(Icons.done_all,
-                    size: 13,
-                    color:
-                        readByPeer ? const Color(0xFF4FC3F7) : Colors.white70),
+                Icon(
+                  Icons.done_all,
+                  size: 13,
+                  color: readByPeer ? const Color(0xFF4FC3F7) : Colors.white70,
+                ),
               ],
             ],
           ),
@@ -819,7 +1320,25 @@ class _Bubble extends StatelessWidget {
     );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: bubble,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: message.reactions.isEmpty ? 0 : 14),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            bubble,
+            if (message.reactions.isNotEmpty)
+              PositionedDirectional(
+                start: 10,
+                bottom: -9,
+                child: MessageReactionBadge(
+                  reactions: message.reactions,
+                  hasMine: message.myReaction != null,
+                  onTap: onReactions ?? () {},
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -858,22 +1377,31 @@ class _OrderCard extends StatelessWidget {
                 const Icon(Icons.receipt_long, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text('Order request',
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700)),
+                  child: Text(
+                    'Order request',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(AppRadius.full),
                   ),
-                  child: Text(badge,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700)),
+                  child: Text(
+                    badge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -885,8 +1413,12 @@ class _OrderCard extends StatelessWidget {
               children: [
                 Text(order.title ?? 'Order', style: texts.titleMedium),
                 const SizedBox(height: 8),
-                Text('${order.amountCredits} credits',
-                    style: texts.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  '${order.amountCredits} credits',
+                  style: texts.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -910,8 +1442,10 @@ class _OrderCard extends StatelessWidget {
                     Expanded(
                       child: AppButton(
                         label: 'Pay',
-                        onPressed: () => AppOverlays.snack(context,
-                            'Order payment is settled by the backend once its pay endpoint is live.'),
+                        onPressed: () => AppOverlays.snack(
+                          context,
+                          'Order payment is settled by the backend once its pay endpoint is live.',
+                        ),
                       ),
                     ),
                   ],
@@ -945,7 +1479,9 @@ class _InquiryCard extends StatelessWidget {
             : primary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: accent.withValues(alpha: mine ? 0.4 : 0.3), width: 1),
+          color: accent.withValues(alpha: mine ? 0.4 : 0.3),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -956,17 +1492,22 @@ class _InquiryCard extends StatelessWidget {
             children: [
               Icon(Icons.help_outline, size: 13, color: accent),
               const SizedBox(width: 5),
-              Text('INQUIRY',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: accent)),
+              Text(
+                'INQUIRY',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: accent,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(message.body ?? '',
-              style: TextStyle(color: mine ? Colors.white : null)),
+          Text(
+            message.body ?? '',
+            style: TextStyle(color: mine ? Colors.white : null),
+          ),
           if ((message.inquiryPrice ?? '').isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
@@ -977,11 +1518,14 @@ class _InquiryCard extends StatelessWidget {
                     : primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: Text('Price ${message.inquiryPrice}',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: mine ? Colors.white : primary)),
+              child: Text(
+                'Price ${message.inquiryPrice}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: mine ? Colors.white : primary,
+                ),
+              ),
             ),
           ],
         ],
@@ -1015,7 +1559,9 @@ class _OfferCard extends StatelessWidget {
             : primary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: accent.withValues(alpha: mine ? 0.4 : 0.3), width: 1),
+          color: accent.withValues(alpha: mine ? 0.4 : 0.3),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,12 +1572,15 @@ class _OfferCard extends StatelessWidget {
             children: [
               Icon(Icons.local_offer, size: 13, color: accent),
               const SizedBox(width: 5),
-              Text('OFFER',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: accent)),
+              Text(
+                'OFFER',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: accent,
+                ),
+              ),
             ],
           ),
           if (remarks != null) ...[
@@ -1048,11 +1597,14 @@ class _OfferCard extends StatelessWidget {
                     : primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: Text('₹ $price',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: mine ? Colors.white : primary)),
+              child: Text(
+                '₹ $price',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: mine ? Colors.white : primary,
+                ),
+              ),
             ),
           ],
         ],
@@ -1075,21 +1627,34 @@ class _LocationCard extends StatelessWidget {
     final label = (message.locationLabel?.isNotEmpty ?? false)
         ? message.locationLabel!
         : (message.body?.isNotEmpty ?? false)
-            ? message.body!
-            : 'Location';
+        ? message.body!
+        : 'Location';
     if (lat == null || lng == null) {
       // No coordinates — just show the label with a pin.
-      return Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.location_on,
-            size: 18, color: mine ? Colors.white : Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 6),
-        Flexible(child: Text(label, style: TextStyle(color: mine ? Colors.white : null))),
-      ]);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.location_on,
+            size: 18,
+            color: mine ? Colors.white : Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(color: mine ? Colors.white : null),
+            ),
+          ),
+        ],
+      );
     }
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => LocationViewPage(lat: lat, lng: lng, label: label),
-      )),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => LocationViewPage(lat: lat, lng: lng, label: label),
+        ),
+      ),
       child: Container(
         width: 220,
         margin: const EdgeInsets.only(top: 2, bottom: 4),
@@ -1097,8 +1662,10 @@ class _LocationCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: (mine ? Colors.white : context.nexveero.border)
-                  .withValues(alpha: mine ? 0.4 : 1)),
+            color: (mine ? Colors.white : context.nexveero.border).withValues(
+              alpha: mine ? 0.4 : 1,
+            ),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1112,8 +1679,10 @@ class _LocationCard extends StatelessWidget {
                 errorBuilder: (_, _, _) => Container(
                   color: context.nexveero.elevated,
                   alignment: Alignment.center,
-                  child: Icon(Icons.map_outlined,
-                      color: context.nexveero.textSecondary),
+                  child: Icon(
+                    Icons.map_outlined,
+                    color: context.nexveero.textSecondary,
+                  ),
                 ),
               ),
             ),
@@ -1122,17 +1691,24 @@ class _LocationCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.location_on,
-                      size: 16,
-                      color: mine ? Colors.white : Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: mine
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 6),
                   Flexible(
-                    child: Text(label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: mine ? Colors.white : null)),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: mine ? Colors.white : null,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1169,8 +1745,9 @@ class _FileChip extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: (mine ? Colors.white : context.nexveero.elevated)
-              .withValues(alpha: mine ? 0.18 : 1),
+          color: (mine ? Colors.white : context.nexveero.elevated).withValues(
+            alpha: mine ? 0.18 : 1,
+          ),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -1179,12 +1756,15 @@ class _FileChip extends StatelessWidget {
             Icon(icon, size: 20, color: fg),
             const SizedBox(width: 8),
             Flexible(
-              child: Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: mine ? Colors.white : null,
-                      fontWeight: FontWeight.w500)),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: mine ? Colors.white : null,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Icon(Icons.download_rounded, size: 18, color: fg),
@@ -1198,8 +1778,24 @@ class _FileChip extends StatelessWidget {
   Future<void> _open(BuildContext context) async {
     final full = MediaUrl.resolve(message.attachmentUrl);
     if (full == null) return;
-    final ok = await launchUrl(Uri.parse(full),
-        mode: LaunchMode.externalApplication);
+    if (message.attachmentKind == 'video' ||
+        Uri.parse(full).path.toLowerCase().endsWith('.pdf') ||
+        (message.attachmentName ?? '').toLowerCase().endsWith('.pdf')) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AttachmentViewPage(
+            url: full,
+            name: message.attachmentName ?? 'Attachment',
+            video: message.attachmentKind == 'video',
+          ),
+        ),
+      );
+      return;
+    }
+    final ok = await launchUrl(
+      Uri.parse(full),
+      mode: LaunchMode.externalApplication,
+    );
     if (!ok && context.mounted) {
       AppOverlays.snack(context, 'Could not open the file');
     }
@@ -1216,55 +1812,25 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onAttach,
     required this.onVoice,
+    required this.onQuickReply,
+    required this.focusNode,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final Conversation conversation;
   final VoidCallback onSend;
   final VoidCallback onAttach;
   final VoidCallback onVoice;
 
-  /// Canned one-tap replies for quick trade chat.
-  static const _quickReplies = [
-    'Okay',
-    'OK Done',
-    'No',
-    'Not Available',
-    'Right',
-    'Final Price',
-  ];
+  final ValueChanged<String> onQuickReply;
 
-  /// Opens a sheet of quick replies; tapping one drops it into the field so the
-  /// user can tweak before sending.
   void _showQuickReplies(BuildContext context) {
-    AppOverlays.sheet<void>(
+    FocusManager.instance.primaryFocus?.unfocus();
+    ChatEmojiSheet.show(
       context,
-      builder: (sheetCtx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Quick replies',
-              style: Theme.of(sheetCtx).textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              for (final r in _quickReplies)
-                ActionChip(
-                  label: Text(r),
-                  onPressed: () {
-                    final existing = controller.text.trimRight();
-                    controller.text = existing.isEmpty ? r : '$existing $r';
-                    controller.selection = TextSelection.fromPosition(
-                        TextPosition(offset: controller.text.length));
-                    Navigator.of(sheetCtx).pop();
-                  },
-                ),
-            ],
-          ),
-        ],
-      ),
+      controller: controller,
+      onQuickReply: onQuickReply,
     );
   }
 
@@ -1274,20 +1840,26 @@ class _Composer extends StatelessWidget {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Text('You can’t reply to this conversation.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.nexveero.textSecondary)),
+          child: Text(
+            'You can’t reply to this conversation.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.nexveero.textSecondary),
+          ),
         ),
       );
     }
     final primary = Theme.of(context).colorScheme.primary;
     // Groups surface an @-mention affordance where direct/broadcast show emoji.
-    final fieldIcon =
-        conversation.type == ConversationType.group ? Icons.alternate_email : Icons.mood;
+    final fieldIcon = Icons.mood;
 
     return SafeArea(
       child: Container(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, AppSpacing.xs),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xs,
+          AppSpacing.xs,
+          AppSpacing.xs,
+          AppSpacing.xs,
+        ),
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           border: Border(top: BorderSide(color: context.nexveero.border)),
@@ -1312,6 +1884,7 @@ class _Composer extends StatelessWidget {
                     Expanded(
                       child: TextField(
                         controller: controller,
+                        focusNode: focusNode,
                         minLines: 1,
                         maxLines: 4,
                         keyboardType: TextInputType.multiline,
@@ -1329,17 +1902,26 @@ class _Composer extends StatelessWidget {
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                          ),
                         ),
                       ),
                     ),
-                    InkWell(
-                      onTap: () => _showQuickReplies(context),
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(fieldIcon,
-                            size: 20, color: context.nexveero.textSecondary),
+                    Semantics(
+                      label: 'Emojis and quick replies',
+                      button: true,
+                      child: InkWell(
+                        onTap: () => _showQuickReplies(context),
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            fieldIcon,
+                            size: 20,
+                            color: context.nexveero.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -1354,7 +1936,10 @@ class _Composer extends StatelessWidget {
                   return const Padding(
                     padding: EdgeInsets.all(14),
                     child: SizedBox(
-                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   );
                 }
                 return ValueListenableBuilder<TextEditingValue>(
@@ -1362,7 +1947,10 @@ class _Composer extends StatelessWidget {
                   builder: (context, value, _) {
                     final hasText = value.text.trim().isNotEmpty;
                     return IconButton(
-                      icon: Icon(hasText ? Icons.send : Icons.mic, color: primary),
+                      icon: Icon(
+                        hasText ? Icons.send : Icons.mic,
+                        color: primary,
+                      ),
                       tooltip: hasText ? 'Send' : 'Voice message',
                       onPressed: hasText ? onSend : onVoice,
                     );
@@ -1419,17 +2007,19 @@ class _DateSeparator extends StatelessWidget {
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        padding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 3),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 3,
+        ),
         decoration: BoxDecoration(
           color: context.nexveero.elevated,
           borderRadius: BorderRadius.circular(AppRadius.full),
         ),
-        child: Text(_label(date),
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: context.nexveero.textSecondary)),
+        child: Text(
+          _label(date),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: context.nexveero.textSecondary),
+        ),
       ),
     );
   }
@@ -1457,21 +2047,24 @@ class _BroadcastNotice extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
       color: nex.gradientStart.withValues(alpha: 0.10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.campaign_outlined,
-              size: 16, color: Theme.of(context).colorScheme.primary),
+          Icon(
+            Icons.campaign_outlined,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'Messages are delivered individually to each recipient. '
               'Replies come in private chats.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: nex.textSecondary),
             ),
           ),
@@ -1519,14 +2112,15 @@ class _ThreadLabelSheetState extends State<_ThreadLabelSheet> {
       } else {
         ids.remove(l.id);
       }
-      final updated =
-          widget.labels.where((x) => ids.contains(x.id)).toList();
+      final updated = widget.labels.where((x) => ids.contains(x.id)).toList();
       Navigator.of(context).pop(updated);
       return;
     }
     setState(() => _busyId = null);
     AppOverlays.snack(
-        context, result.failureOrNull?.message ?? 'Could not update label');
+      context,
+      result.failureOrNull?.message ?? 'Could not update label',
+    );
   }
 
   @override
@@ -1535,10 +2129,12 @@ class _ThreadLabelSheetState extends State<_ThreadLabelSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Labels for ${widget.conversation.title}',
-            style: Theme.of(context).textTheme.titleMedium,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+        Text(
+          'Labels for ${widget.conversation.title}',
+          style: Theme.of(context).textTheme.titleMedium,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         const SizedBox(height: AppSpacing.sm),
         ConstrainedBox(
           constraints: BoxConstraints(
@@ -1556,7 +2152,8 @@ class _ThreadLabelSheetState extends State<_ThreadLabelSheet> {
                       height: 14,
                       decoration: BoxDecoration(
                         color: l.colorValue(
-                            Theme.of(context).colorScheme.primary),
+                          Theme.of(context).colorScheme.primary,
+                        ),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -1582,18 +2179,20 @@ class _SystemLine extends StatelessWidget {
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        padding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
           color: context.nexveero.warning.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        child: Text(text,
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: context.nexveero.textSecondary)),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.nexveero.textSecondary),
+        ),
       ),
     );
   }

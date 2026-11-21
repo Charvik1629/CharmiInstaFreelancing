@@ -21,12 +21,16 @@ class ChatLabelsCubit extends Cubit<ChatLabelsState> {
       case Success(value: final list):
         final sorted = [...list]
           ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-        emit(state.copyWith(
-          status: sorted.isEmpty ? LabelsStatus.empty : LabelsStatus.loaded,
-          labels: sorted,
-        ));
+        emit(
+          state.copyWith(
+            status: sorted.isEmpty ? LabelsStatus.empty : LabelsStatus.loaded,
+            labels: sorted,
+          ),
+        );
       case Err(failure: final f):
-        emit(state.copyWith(status: LabelsStatus.error, errorMessage: f.message));
+        emit(
+          state.copyWith(status: LabelsStatus.error, errorMessage: f.message),
+        );
     }
   }
 
@@ -38,7 +42,10 @@ class ChatLabelsCubit extends Cubit<ChatLabelsState> {
     required int sortOrder,
   }) async {
     final result = await _repository.createLabel(
-        name: name, color: color, sortOrder: sortOrder);
+      name: name,
+      color: color,
+      sortOrder: sortOrder,
+    );
     if (result case Success(value: final label)) {
       final list = [...state.labels, label]
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -56,7 +63,11 @@ class ChatLabelsCubit extends Cubit<ChatLabelsState> {
     required int sortOrder,
   }) async {
     final result = await _repository.updateLabel(
-        id: id, name: name, color: color, sortOrder: sortOrder);
+      id: id,
+      name: name,
+      color: color,
+      sortOrder: sortOrder,
+    );
     if (result case Success(value: final label)) {
       final list = state.labels.map((l) => l.id == id ? label : l).toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -71,10 +82,12 @@ class ChatLabelsCubit extends Cubit<ChatLabelsState> {
     final result = await _repository.deleteLabel(id);
     if (result.isSuccess) {
       final list = state.labels.where((l) => l.id != id).toList();
-      emit(state.copyWith(
-        labels: list,
-        status: list.isEmpty ? LabelsStatus.empty : LabelsStatus.loaded,
-      ));
+      emit(
+        state.copyWith(
+          labels: list,
+          status: list.isEmpty ? LabelsStatus.empty : LabelsStatus.loaded,
+        ),
+      );
       return true;
     }
     emit(state.copyWith(errorMessage: result.failureOrNull?.message));

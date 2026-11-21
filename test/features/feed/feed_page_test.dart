@@ -21,34 +21,36 @@ Load _load({bool own = false, bool requested = false, bool canMessage = true}) =
       canDelete: own,
       viewerHasRequested: requested,
       postType: const PostType(id: 2, slug: 'sell', name: 'Sell'),
-      author: const Author(id: 2, name: 'Aria Lang'),
+      author: const Author(id: 2, name: 'Aria Lang', businessName: 'Aria Industries'),
       createdAt: DateTime.now().subtract(const Duration(hours: 2)),
     );
 
 void main() {
-  testWidgets('renders author, caption and Request CTA for others', (tester) async {
-    var requested = 0;
+  testWidgets('shows company and four actions without request CTA', (tester) async {
+    var asks = 0, offers = 0, shares = 0, reports = 0;
     await tester.pumpWidget(_host(PostCard(
       load: _load(),
-      onRequest: () => requested++,
-      onReport: () {},
-      onDelete: () {},
+      onRequest: () => fail('Removed request action must not run'),
+      onAsk: () => asks++, onOffer: () => offers++, onShare: () => shares++,
+      onReport: () => reports++, onDelete: () {},
     )));
-    expect(find.text('Aria Lang'), findsOneWidget);
-    expect(find.text('Golden hour over the Alfama rooftops'), findsOneWidget);
-    expect(find.text('Request this post'), findsOneWidget);
-    await tester.tap(find.text('Request this post'));
-    expect(requested, 1);
+    expect(find.text('Aria Industries'), findsOneWidget);
+    expect(find.textContaining('Golden hour', findRichText: true), findsOneWidget);
+    expect(find.text('Request this post'), findsNothing);
+    await tester.tap(find.text('Share'));
+    await tester.tap(find.text('Report'));
+    expect(shares, 1);
+    expect(reports, 1);
+    // Capability flags remain authoritative for Ask and Offer.
+    expect(asks, 0);
+    expect(offers, 0);
   });
 
-  testWidgets('already-requested shows disabled Requested state', (tester) async {
+  testWidgets('previous request status does not restore removed CTA', (tester) async {
     await tester.pumpWidget(_host(PostCard(
-      load: _load(requested: true),
-      onRequest: () {},
-      onReport: () {},
-      onDelete: () {},
+      load: _load(requested: true), onRequest: () {}, onReport: () {}, onDelete: () {},
     )));
-    expect(find.text('Requested'), findsOneWidget);
+    expect(find.text('Requested'), findsNothing);
     expect(find.text('Request this post'), findsNothing);
   });
 

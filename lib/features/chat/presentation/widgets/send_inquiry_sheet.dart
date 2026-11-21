@@ -46,7 +46,8 @@ class _SendInquirySheetState extends State<SendInquirySheet> {
       return;
     }
     final price = _price.text.trim();
-    Navigator.of(context).pop((body: body, price: price.isEmpty ? null : price));
+    Navigator.of(context)
+        .pop((body: body, price: price.isEmpty ? null : price));
   }
 
   @override
@@ -61,11 +62,11 @@ class _SendInquirySheetState extends State<SendInquirySheet> {
           children: [
             Icon(Icons.help_outline, size: 18, color: primary),
             const SizedBox(width: 6),
-            Text('Inquiry',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Inquiry',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const Spacer(),
             IconButton(
               icon: Icon(Icons.close, size: 20, color: nex.textSecondary),
@@ -85,9 +86,11 @@ class _SendInquirySheetState extends State<SendInquirySheet> {
           },
         ),
         const SizedBox(height: AppSpacing.lg),
-        Text('Price (optional)',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600, color: nex.textSecondary)),
+        Text(
+          'Price (optional)',
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(fontWeight: FontWeight.w600, color: nex.textSecondary),
+        ),
         const SizedBox(height: AppSpacing.sm),
         AppTextField(
           controller: _price,
@@ -99,11 +102,7 @@ class _SendInquirySheetState extends State<SendInquirySheet> {
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
-        AppButton(
-          label: 'Send inquiry',
-          icon: Icons.send,
-          onPressed: _submit,
-        ),
+        AppButton(label: 'Send inquiry', icon: Icons.send, onPressed: _submit),
       ],
     );
   }

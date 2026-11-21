@@ -30,8 +30,8 @@ class _StarredMessagesPageState extends State<StarredMessagesPage> {
     _future = sl<ChatRepository>().getStarredMessages();
   }
 
-  void _reload() => setState(
-      () => _future = sl<ChatRepository>().getStarredMessages());
+  void _reload() =>
+      setState(() => _future = sl<ChatRepository>().getStarredMessages());
 
   @override
   Widget build(BuildContext context) {
@@ -49,15 +49,19 @@ class _StarredMessagesPageState extends State<StarredMessagesPage> {
               if (messages.isEmpty) {
                 return const EmptyView(
                   title: 'No starred messages',
-                  subtitle: 'Long-press a message and tap Star to save it here.',
+                  subtitle:
+                      'Long-press a message and tap Star to save it here.',
                   icon: Icons.star_border,
                 );
               }
               return ListView.separated(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                 itemCount: messages.length,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, indent: 16, color: context.nexveero.border),
+                separatorBuilder: (_, _) => Divider(
+                  height: 1,
+                  indent: 16,
+                  color: context.nexveero.border,
+                ),
                 itemBuilder: (context, i) => _StarredTile(message: messages[i]),
               );
           }
@@ -77,28 +81,35 @@ class _StarredTile extends StatelessWidget {
     final preview = (message.body ?? '').isNotEmpty
         ? message.body!
         : (message.hasImage
-            ? '📷 Photo'
-            : (message.hasFileAttachment ? '📎 Attachment' : 'Message'));
+              ? '📷 Photo'
+              : (message.hasFileAttachment ? '📎 Attachment' : 'Message'));
     return ListTile(
       leading: Icon(Icons.star, color: context.nexveero.warning),
-      title: Text(message.senderName ?? 'Message',
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: texts.titleSmall),
+      title: Text(
+        message.senderName ?? 'Message',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: texts.titleSmall,
+      ),
       subtitle: Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: message.createdAt != null
-          ? Text(message.createdAt!.timeAgo,
-              style: texts.labelSmall
-                  ?.copyWith(color: context.nexveero.textSecondary))
+          ? Text(
+              message.createdAt!.timeAgo,
+              style: texts.labelSmall?.copyWith(
+                color: context.nexveero.textSecondary,
+              ),
+            )
           : null,
       onTap: message.conversationId == null
           ? null
           : () => context.push(
-                AppRoutes.chatThread,
-                extra: Conversation(
-                  id: message.conversationId!,
-                  type: ConversationType.direct,
-                  title: message.senderName ?? 'Chat',
-                ),
+              AppRoutes.chatThread,
+              extra: Conversation(
+                id: message.conversationId!,
+                type: ConversationType.direct,
+                title: message.senderName ?? 'Chat',
               ),
+            ),
     );
   }
 }

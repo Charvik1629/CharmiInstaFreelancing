@@ -1,4 +1,8 @@
 import 'dart:io' show Platform;
+import 'dart:math';
+
+import '../../../../core/storage/storage_keys.dart';
+import '../../../../core/storage/storage_manager.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/models/user.dart';
@@ -10,8 +14,10 @@ import '../../domain/entities/auth_session.dart';
 /// (mapped by [ApiClient]); the repository converts those to typed failures.
 abstract class AuthRemoteDataSource {
   /// [identifier] is the username, email, or mobile number.
-  Future<AuthSession> login(
-      {required String identifier, required String password});
+  Future<AuthSession> login({
+    required String identifier,
+    required String password,
+  });
 
   /// Creates a B2B account. Returns the created [User] (with
   /// `approval_status: pending`) — no token is issued until an admin approves.
@@ -37,6 +43,12 @@ abstract class AuthRemoteDataSource {
   Future<void> sendOtp(String identifier);
   Future<void> verifyOtp({required String identifier, required String code});
   Future<void> forgotPassword(String email);
+  Future<void> resetPassword({
+    required String login,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  });
   Future<void> changePassword({
     required String currentPassword,
     required String password,
@@ -45,12 +57,31 @@ abstract class AuthRemoteDataSource {
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
-  AuthRemoteDataSourceImpl(this._client);
+  AuthRemoteDataSourceImpl(this._client, this._storage);
 
   final ApiClient _client;
+  final StorageManager _storage;
 
   /// Labels the Sanctum token so it can be revoked per device later.
-  String get _deviceName => Platform.isIOS ? 'ios' : 'android';
+  String get _deviceName {
+    var id = _storage.getString(StorageKeys.installationId);
+    if (id == null || id.isEmpty) {
+      throw StateError('Installation ID must be initialized before login');
+    }
+    return '${Platform.isIOS ? 'ios' : 'android'}-$id';
+  }
+
+  static Future<void> initializeInstallation(StorageManager storage) async {
+    if (storage.getString(StorageKeys.installationId)?.isNotEmpty ?? false) {
+      return;
+    }
+    final random = Random.secure();
+    final id = List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    await storage.setString(StorageKeys.installationId, id);
+  }
 
   @override
   Future<AuthSession> login({
@@ -134,20 +165,47 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   @override
   Future<void> sendOtp(String identifier) async {
-    await _client.post<dynamic>(ApiEndpoints.otpSend,
-        data: {'identifier': identifier});
+    await _client.post<dynamic>(
+      ApiEndpoints.otpSend,
+      data: {'identifier': identifier},
+    );
   }
 
   @override
-  Future<void> verifyOtp({required String identifier, required String code}) async {
-    await _client.post<dynamic>(ApiEndpoints.otpVerify,
-        data: {'identifier': identifier, 'code': code});
+  Future<void> verifyOtp({
+    required String identifier,
+    required String code,
+  }) async {
+    await _client.post<dynamic>(
+      ApiEndpoints.otpVerify,
+      data: {'identifier': identifier, 'code': code},
+    );
   }
 
   @override
   Future<void> forgotPassword(String email) async {
-    await _client.post<dynamic>(ApiEndpoints.passwordForgot,
-        data: {'email': email});
+    await _client.post<dynamic>(
+      ApiEndpoints.passwordForgot,
+      data: {'login': email},
+    );
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String login,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    await _client.post<dynamic>(
+      ApiEndpoints.passwordReset,
+      data: {
+        'login': login,
+        'token': token,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
   }
 
   @override
@@ -156,10 +214,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String password,
     required String passwordConfirmation,
   }) async {
-    await _client.post<dynamic>(ApiEndpoints.passwordChange, data: {
-      'current_password': currentPassword,
-      'password': password,
-      'password_confirmation': passwordConfirmation,
-    });
+    await _client.post<dynamic>(
+      ApiEndpoints.passwordChange,
+      data: {
+        'current_password': currentPassword,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
   }
 }

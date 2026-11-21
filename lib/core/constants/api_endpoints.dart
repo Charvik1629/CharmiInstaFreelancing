@@ -54,6 +54,14 @@ class ApiEndpoints {
   static String offerChat(Object id) => '/offers/$id/chat';
 
   // Chats & messages
+  static const disappearingOptions = '/disappearing-messages/options';
+  static String conversationDisappearing(int id) =>
+      '/conversations/$id/disappearing-messages';
+  static String messageKeep(int id, int messageId) =>
+      '/conversations/$id/messages/$messageId/keep';
+  static String messageReaction(int id, int messageId) =>
+      '/conversations/$id/messages/$messageId/reaction';
+  static String conversationShared(int id) => '/conversations/$id/shared';
   static const String chats = '/chats';
   static const String chatsUnreadCount = '/chats/unread-count';
   static const String chatsPinRequirement = '/chats/pin-requirement';
@@ -63,7 +71,8 @@ class ApiEndpoints {
   static String conversationLabel(Object conversationId, Object labelId) =>
       '/conversations/$conversationId/labels/$labelId';
   static String conversation(Object id) => '/conversations/$id';
-  static String conversationMessages(Object id) => '/conversations/$id/messages';
+  static String conversationMessages(Object id) =>
+      '/conversations/$id/messages';
   static String conversationMessage(Object id, Object msgId) =>
       '/conversations/$id/messages/$msgId';
   static String conversationRead(Object id) => '/conversations/$id/read';

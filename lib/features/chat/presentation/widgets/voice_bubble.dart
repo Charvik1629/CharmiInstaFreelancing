@@ -78,13 +78,16 @@ class _VoiceBubbleState extends State<VoiceBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final fg = widget.mine ? Colors.white : Theme.of(context).colorScheme.primary;
+    final fg = widget.mine
+        ? Colors.white
+        : Theme.of(context).colorScheme.primary;
     final track = widget.mine
         ? Colors.white.withValues(alpha: 0.35)
         : context.nexveero.border;
     final total = _duration.inMilliseconds;
-    final value =
-        total == 0 ? 0.0 : (_position.inMilliseconds / total).clamp(0.0, 1.0);
+    final value = total == 0
+        ? 0.0
+        : (_position.inMilliseconds / total).clamp(0.0, 1.0);
     final shown = _position > Duration.zero ? _position : _duration;
 
     return SizedBox(
@@ -105,7 +108,11 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                   ? SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: fg))
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: fg,
+                      ),
+                    )
                   : Icon(_playing ? Icons.pause : Icons.play_arrow, color: fg),
             ),
           ),
@@ -122,25 +129,30 @@ class _VoiceBubbleState extends State<VoiceBubble> {
                     inactiveTrackColor: track,
                     thumbColor: fg,
                     overlayShape: SliderComponentShape.noOverlay,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
                   ),
                   child: Slider(
                     value: value,
                     onChanged: total == 0
                         ? null
-                        : (v) => _player.seek(Duration(
-                            milliseconds: (v * total).round())),
+                        : (v) => _player.seek(
+                            Duration(milliseconds: (v * total).round()),
+                          ),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
-                  child: Text(_fmt(shown),
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: widget.mine
-                              ? Colors.white70
-                              : context.nexveero.textSecondary)),
+                  child: Text(
+                    _fmt(shown),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: widget.mine
+                          ? Colors.white70
+                          : context.nexveero.textSecondary,
+                    ),
+                  ),
                 ),
               ],
             ),

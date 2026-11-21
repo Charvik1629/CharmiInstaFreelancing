@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import '../../../../core/storage/storage_manager.dart';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,6 +24,28 @@ part 'chat_list_state.dart';
 class ChatListCubit extends Cubit<ChatListState> {
   ChatListCubit(this._repository, this._search) : super(const ChatListState()) {
     _listenRealtime();
+    if (sl.isRegistered<StorageManager>()) {
+      final raw = sl<StorageManager>().getString('chat_filter_order');
+      if (raw != null) {
+        try {
+          final names = (jsonDecode(raw) as List).whereType<String>().toList();
+          final order = [
+            for (final name in names)
+              ...ChatFilter.values.where((f) => f.name == name),
+          ];
+          emit(
+            state.copyWith(
+              filterOrder: [
+                ...order.toSet(),
+                ...ChatFilter.values.where((f) => !order.contains(f)),
+              ],
+            ),
+          );
+        } catch (_) {
+          /* Keep default ordering for older/corrupt preferences. */
+        }
+      }
+    }
   }
 
   final ChatRepository _repository;
@@ -35,6 +60,7 @@ class ChatListCubit extends Cubit<ChatListState> {
     final socket = sl<SocketService>();
     _socketSubs.add(socket.conversationCreated.listen((_) => _refreshLive()));
     _socketSubs.add(socket.messages.listen((_) => _refreshLive()));
+    _socketSubs.add(socket.chatChanges.listen((_) => _refreshLive()));
     // A live `unread:update` (new message, or a thread I just read elsewhere)
     // changes a row's badge / order — refresh so the inbox reflects it at once.
     _socketSubs.add(socket.unreadUpdates.listen((_) => _refreshLive()));
@@ -63,6 +89,12 @@ class ChatListCubit extends Cubit<ChatListState> {
     emit(state.copyWith(status: ChatListStatus.loading));
     await _loadLabels();
     await _fetch();
+  }
+
+  Future<Result<void>> deleteChat(int id) async {
+    final result = await _repository.deleteConversation(id);
+    if (result.isSuccess && !isClosed) await refresh();
+    return result;
   }
 
   Future<void> refresh() => _fetch();
@@ -146,16 +178,24 @@ class ChatListCubit extends Cubit<ChatListState> {
   Future<void> setLabelFilter(int? labelId) async {
     // Toggle the active label off → back to the plain "All" view.
     if (labelId == null || labelId == state.labelFilterId) {
-      emit(state.copyWith(
-          clearLabelFilter: true, filter: ChatFilter.all, status: ChatListStatus.loading));
+      emit(
+        state.copyWith(
+          clearLabelFilter: true,
+          filter: ChatFilter.all,
+          status: ChatListStatus.loading,
+        ),
+      );
       await _fetch();
       return;
     }
-    emit(state.copyWith(
+    emit(
+      state.copyWith(
         labelFilterId: labelId,
         filter: ChatFilter.all,
         status: ChatListStatus.loading,
-        conversations: const []));
+        conversations: const [],
+      ),
+    );
     await _fetch();
   }
 
@@ -202,14 +242,28 @@ class ChatListCubit extends Cubit<ChatListState> {
     return ok;
   }
 
+  Future<void> reorderFilters(List<ChatFilter> order) async {
+    if (order.toSet().length != ChatFilter.values.length) return;
+    emit(state.copyWith(filterOrder: List.unmodifiable(order)));
+    if (sl.isRegistered<StorageManager>()) {
+      await sl<StorageManager>().setString(
+        'chat_filter_order',
+        jsonEncode(order.map((f) => f.name).toList()),
+      );
+    }
+  }
+
   Future<void> setFilter(ChatFilter filter) async {
     if (filter == state.filter && state.labelFilterId == null) return;
     // Picking a built-in filter clears any active label filter.
-    emit(state.copyWith(
+    emit(
+      state.copyWith(
         filter: filter,
         clearLabelFilter: true,
         status: ChatListStatus.loading,
-        conversations: const []));
+        conversations: const [],
+      ),
+    );
     await _fetch();
   }
 
@@ -222,25 +276,34 @@ class ChatListCubit extends Cubit<ChatListState> {
         // Merge all inbox sources; error only if everything failed.
         if (chats is Err && questions is Err && broadcasts is Err) {
           return _emitError(
-              chats.failureOrNull?.message ?? 'Could not load chats');
+            chats.failureOrNull?.message ?? 'Could not load chats',
+          );
         }
         final seen = <int>{};
         final merged = <Conversation>[
           ...chats.valueOrNull ?? const [],
-          ...questions.valueOrNull ?? const [],
-          ...broadcasts.valueOrNull ?? const [],
-        ].where((c) => _matchesQuery(c) && seen.add(c.id)).toList()
-          ..sort(_byRecent);
+          ...(questions.valueOrNull ?? const <Conversation>[]).where(
+            _matchesQuery,
+          ),
+          ...(broadcasts.valueOrNull ?? const <Conversation>[]).where(
+            _matchesQuery,
+          ),
+        ].where((c) => seen.add(c.id)).toList()..sort(_byRecent);
         _emitList(merged);
+      case ChatFilter.offers:
+        _handle(await _repository.getChats(q: _q, kind: 'offer'));
       case ChatFilter.unread:
-        _handle(await _repository.getChats(q: _q),
-            keep: (c) => c.hasUnread);
+        _handle(await _repository.getChats(q: _q), keep: (c) => c.hasUnread);
       case ChatFilter.direct:
-        _handle(await _repository.getChats(q: _q),
-            keep: (c) => c.type == ConversationType.direct);
+        _handle(
+          await _repository.getChats(q: _q),
+          keep: (c) => c.type == ConversationType.direct,
+        );
       case ChatFilter.groups:
-        _handle(await _repository.getChats(q: _q),
-            keep: (c) => c.type == ConversationType.group);
+        _handle(
+          await _repository.getChats(q: _q),
+          keep: (c) => c.type == ConversationType.group,
+        );
       case ChatFilter.questions:
         _handle(await _repository.getQuestions(), keep: _matchesQuery);
       case ChatFilter.photos:
@@ -256,7 +319,10 @@ class ChatListCubit extends Cubit<ChatListState> {
     }
   }
 
-  void _handle(Result<List<Conversation>> result, {bool Function(Conversation)? keep}) {
+  void _handle(
+    Result<List<Conversation>> result, {
+    bool Function(Conversation)? keep,
+  }) {
     switch (result) {
       case Success(value: final list):
         final filtered = (keep == null ? list : list.where(keep).toList())
@@ -273,11 +339,13 @@ class ChatListCubit extends Cubit<ChatListState> {
     final shown = labelId == null
         ? list
         : list.where((c) => c.labels.any((l) => l.id == labelId)).toList();
-    emit(state.copyWith(
-      status: shown.isEmpty ? ChatListStatus.empty : ChatListStatus.loaded,
-      conversations: shown,
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(
+        status: shown.isEmpty ? ChatListStatus.empty : ChatListStatus.loaded,
+        conversations: shown,
+        clearError: true,
+      ),
+    );
   }
 
   void _emitError(String message) {
@@ -287,6 +355,7 @@ class ChatListCubit extends Cubit<ChatListState> {
 
   /// Newest activity first; threads without a last message sink to the bottom.
   static int _byRecent(Conversation a, Conversation b) {
+    if (a.isSelf != b.isSelf) return a.isSelf ? -1 : 1;
     // Pinned conversations always sort above unpinned ones.
     if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
     final at = a.lastMessageAt, bt = b.lastMessageAt;
@@ -298,8 +367,7 @@ class ChatListCubit extends Cubit<ChatListState> {
 
   /// Pins / unpins a conversation, then reloads so it re-sorts to the top.
   Future<Result<void>> togglePin(Conversation c) async {
-    final result =
-        await _repository.pinConversation(c.id, pin: !c.isPinned);
+    final result = await _repository.pinConversation(c.id, pin: !c.isPinned);
     if (result.isSuccess) await _fetch();
     return result;
   }

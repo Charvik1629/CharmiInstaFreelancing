@@ -69,5 +69,7 @@ void main() {
     await tester.pump();
 
     verify(() => repo.login(identifier: 'a@b.co', password: 'password')).called(1);
+    await tester.pumpAndSettle();
+    expect(find.text('FEED'), findsOneWidget);
   });
 }

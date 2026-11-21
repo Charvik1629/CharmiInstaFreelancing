@@ -26,10 +26,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   bool _submitting = false;
+  bool _sent = false;
+  final _token = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmation = TextEditingController();
 
   @override
   void dispose() {
     _email.dispose();
+    _token.dispose();
+    _password.dispose();
+    _confirmation.dispose();
     super.dispose();
   }
 
@@ -37,13 +44,28 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     if (_submitting || !(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
     final email = _email.text.trim();
-    final result = await sl<AuthRepository>().forgotPassword(email);
+    final result = _sent
+        ? await sl<AuthRepository>().resetPassword(
+            login: email,
+            token: _token.text.trim(),
+            password: _password.text,
+            passwordConfirmation: _confirmation.text,
+          )
+        : await sl<AuthRepository>().forgotPassword(email);
     if (!mounted) return;
     setState(() => _submitting = false);
     switch (result) {
       case Success():
-        AppOverlays.snack(context, 'If that account exists, a reset code was sent.');
-        context.push('${AppRoutes.otp}?to=${Uri.encodeComponent(email)}');
+        if (_sent) {
+          AppOverlays.snack(context, 'Password updated. Please sign in again.');
+          context.go(AppRoutes.login);
+        } else {
+          setState(() => _sent = true);
+          AppOverlays.snack(
+            context,
+            'If that account exists, reset instructions were sent.',
+          );
+        }
       case Err(failure: final f):
         AppOverlays.snack(context, f.message);
     }
@@ -66,20 +88,62 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 const SizedBox(height: AppSpacing.lg),
                 Text('Forgot password?', style: texts.displayLarge),
                 const SizedBox(height: AppSpacing.xs),
-                Text("Enter your email and we'll send a reset code.",
-                    style: texts.bodyLarge?.copyWith(color: context.nexveero.textSecondary)),
+                Text(
+                  "Enter your email or username to request a password reset.",
+                  style: texts.bodyLarge?.copyWith(
+                    color: context.nexveero.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 AuthField(
                   controller: _email,
-                  label: 'Email',
-                  hint: 'Enter email',
+                  label: 'Email or username',
+                  hint: 'Enter email or username',
                   icon: Icons.mail_outline,
                   keyboardType: TextInputType.emailAddress,
-                  validator: Validators.email,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Enter email or username'
+                      : null,
                   onSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                AppButton(label: 'Send reset code', isLoading: _submitting, onPressed: _submit),
+                if (_sent) ...[
+                  AuthField(
+                    controller: _token,
+                    label: 'Reset token',
+                    hint: 'Enter the token from your reset instructions',
+                    icon: Icons.key_outlined,
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Enter reset token'
+                        : null,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AuthField(
+                    controller: _password,
+                    label: 'New password',
+                    hint: 'Enter new password',
+                    icon: Icons.lock_outline,
+                    obscure: true,
+                    validator: Validators.password,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AuthField(
+                    controller: _confirmation,
+                    label: 'Confirm password',
+                    hint: 'Re-enter new password',
+                    icon: Icons.lock_outline,
+                    obscure: true,
+                    validator: (value) => value != _password.text
+                        ? 'Passwords do not match'
+                        : Validators.password(value),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+                AppButton(
+                  label: _sent ? 'Reset password' : 'Send reset instructions',
+                  isLoading: _submitting,
+                  onPressed: _submit,
+                ),
                 const SizedBox(height: AppSpacing.lg),
                 Center(
                   child: TextButton(

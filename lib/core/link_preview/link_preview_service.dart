@@ -1,4 +1,5 @@
 import '../constants/api_endpoints.dart';
+import '../widgets/message_link_text.dart';
 import '../network/api_client.dart';
 
 /// WhatsApp-style link metadata (`POST /link-previews`).
@@ -20,12 +21,12 @@ class LinkPreview {
   bool get hasContent => (title ?? '').isNotEmpty || imageUrl != null;
 
   factory LinkPreview.fromJson(Map<String, dynamic> json) => LinkPreview(
-        url: json['url'] as String? ?? '',
-        title: json['title'] as String?,
-        description: json['description'] as String?,
-        imageUrl: json['image_url'] as String?,
-        siteName: json['site_name'] as String?,
-      );
+    url: json['url'] as String? ?? '',
+    title: json['title'] as String?,
+    description: json['description'] as String?,
+    imageUrl: json['image_url'] as String?,
+    siteName: json['site_name'] as String?,
+  );
 }
 
 /// Fetches + caches link previews. The backend caches for 6h; this adds an
@@ -47,10 +48,7 @@ class LinkPreviewService {
     return url;
   }
 
-  static final RegExp _urlRegex = RegExp(
-    r'(https?:\/\/|www\.)[^\s<>()]+',
-    caseSensitive: false,
-  );
+  static final RegExp _urlRegex = MessageLinks.pattern;
 
   Future<LinkPreview?> fetch(String url) async {
     if (_cache.containsKey(url)) return _cache[url];

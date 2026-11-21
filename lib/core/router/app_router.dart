@@ -66,6 +66,7 @@ import '../storage/storage_keys.dart';
 import '../storage/storage_manager.dart';
 import 'app_routes.dart';
 import 'go_router_refresh.dart';
+import 'session_gate.dart';
 
 /// App router with auth-aware redirects. The redirect runs on every auth-state
 /// change (via [GoRouterRefreshStream]) and enforces:
@@ -104,7 +105,7 @@ class AppRouter {
           final extra = state.extra;
           return PendingApprovalPage(
             user: extra is User ? extra : null,
-            rejected: extra is bool ? extra : false,
+            rejected: (extra is bool ? extra : false) || sl<AuthCubit>().state.user?.isRejected == true,
           );
         },
       ),
@@ -241,6 +242,11 @@ class AppRouter {
       if (onboardingSeen && !loggingIn) return AppRoutes.login;
       return null;
     }
+
+    final restricted = sessionGate(auth.user, location,
+      editingAllowed: state.extra is Load && (state.extra as Load).canEdit);
+    if (restricted != null) return restricted;
+    if (auth.user?.isRejected == true) return null;
 
     // Authenticated: keep out of splash / onboarding / auth screens.
     if (location == AppRoutes.splash ||

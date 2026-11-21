@@ -5,7 +5,11 @@ import '../theme/app_theme.dart';
 
 /// A bottom-nav destination. [badge] shows a small dot (e.g. unread chats).
 class AppNavItem {
-  const AppNavItem({required this.icon, required this.label, this.badge = false});
+  const AppNavItem({
+    required this.icon,
+    required this.label,
+    this.badge = false,
+  });
   final IconData icon;
   final String label;
   final bool badge;
@@ -19,9 +23,11 @@ class AppBottomNav extends StatelessWidget {
     required this.items,
     required this.currentIndex,
     required this.onTap,
+    this.itemKeys,
   });
 
   final List<AppNavItem> items;
+  final List<Key>? itemKeys;
   final int currentIndex;
   final ValueChanged<int> onTap;
 
@@ -37,12 +43,18 @@ class AppBottomNav extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: AppSpacing.sm,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               for (var i = 0; i < items.length; i++)
                 _NavButton(
+                  key: itemKeys != null && i < itemKeys!.length
+                      ? itemKeys![i]
+                      : null,
                   item: items[i],
                   active: i == currentIndex,
                   onTap: () => onTap(i),
@@ -56,7 +68,12 @@ class AppBottomNav extends StatelessWidget {
 }
 
 class _NavButton extends StatelessWidget {
-  const _NavButton({required this.item, required this.active, required this.onTap});
+  const _NavButton({
+    super.key,
+    required this.item,
+    required this.active,
+    required this.onTap,
+  });
   final AppNavItem item;
   final bool active;
   final VoidCallback onTap;
@@ -66,7 +83,10 @@ class _NavButton extends StatelessWidget {
     final nexveero = context.nexveero;
     final child = active
         ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.md,
+            ),
             decoration: BoxDecoration(
               gradient: nexveero.primaryGradient,
               borderRadius: BorderRadius.circular(AppRadius.full),

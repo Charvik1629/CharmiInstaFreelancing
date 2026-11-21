@@ -46,13 +46,15 @@ class RegisterCubit extends Cubit<AuthFormState> {
       case Success(value: final user):
         emit(AuthFormState(status: FormStatus.success, user: user));
       case Err(failure: final failure):
-        emit(AuthFormState(
-          status: FormStatus.failure,
-          errorMessage: failure.message,
-          fieldErrors: failure is ValidationFailure
-              ? (failure.fieldErrors ?? const {})
-              : const {},
-        ));
+        emit(
+          AuthFormState(
+            status: FormStatus.failure,
+            errorMessage: failure.message,
+            fieldErrors: failure is ValidationFailure
+                ? (failure.fieldErrors ?? const {})
+                : const {},
+          ),
+        );
     }
   }
 }

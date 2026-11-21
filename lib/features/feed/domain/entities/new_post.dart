@@ -1,9 +1,13 @@
+import '../../../../core/models/post_location.dart';
+
 /// The user's composed post, before it becomes a server [Load]. Kept minimal:
 /// the composer collects these fields and hands them to the repository.
 class NewPost {
   const NewPost({
     required this.title,
     this.body,
+    this.location,
+    this.clearLocation = false,
     this.postTypeId,
     this.imagePaths = const [],
     this.tagIds = const [],
@@ -11,6 +15,8 @@ class NewPost {
 
   final String title;
   final String? body;
+  final PostLocation? location;
+  final bool clearLocation;
 
   /// Selected category id (from PostType). Null = server default.
   final int? postTypeId;

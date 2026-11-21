@@ -76,6 +76,8 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
   Future<Object> _loadBody(NewPost post) async {
     final fields = <String, dynamic>{
       'title': post.title,
+      if (post.location != null) ...post.location!.toJson(),
+      if (post.clearLocation && post.location == null) 'clear_location': true,
       if (post.body != null && post.body!.isNotEmpty) 'body': post.body,
       if (post.postTypeId != null) 'post_type_id': post.postTypeId,
     };
@@ -87,6 +89,7 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
       ];
       return FormData.fromMap({
         ...fields,
+        if (post.clearLocation && post.location == null) 'clear_location': '1',
         if (post.tagIds.isNotEmpty) 'tag_ids[]': post.tagIds,
         'media[]': media,
       });

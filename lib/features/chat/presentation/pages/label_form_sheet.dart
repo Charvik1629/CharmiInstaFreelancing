@@ -84,7 +84,9 @@ class _LabelFormSheetState extends State<LabelFormSheet> {
   Widget build(BuildContext context) {
     final texts = Theme.of(context).textTheme;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -106,9 +108,13 @@ class _LabelFormSheetState extends State<LabelFormSheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text('COLOUR',
-                style: texts.labelSmall?.copyWith(
-                    color: context.nexveero.textSecondary, letterSpacing: 1)),
+            Text(
+              'COLOUR',
+              style: texts.labelSmall?.copyWith(
+                color: context.nexveero.textSecondary,
+                letterSpacing: 1,
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
             Wrap(
               spacing: AppSpacing.md,
@@ -157,16 +163,22 @@ class _LabelFormSheetState extends State<LabelFormSheet> {
 }
 
 class _Swatch extends StatelessWidget {
-  const _Swatch(
-      {required this.hex, required this.selected, required this.onTap});
+  const _Swatch({
+    required this.hex,
+    required this.selected,
+    required this.onTap,
+  });
   final String hex;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = ChatLabel(id: 0, name: '', color: hex)
-        .colorValue(Theme.of(context).colorScheme.primary);
+    final color = ChatLabel(
+      id: 0,
+      name: '',
+      color: hex,
+    ).colorValue(Theme.of(context).colorScheme.primary);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -177,7 +189,9 @@ class _Swatch extends StatelessWidget {
           shape: BoxShape.circle,
           border: selected
               ? Border.all(
-                  color: Theme.of(context).colorScheme.onSurface, width: 3)
+                  color: Theme.of(context).colorScheme.onSurface,
+                  width: 3,
+                )
               : null,
         ),
         child: selected

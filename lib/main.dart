@@ -16,7 +16,7 @@ Future<void> main() async {
   // the router redirects back to login.
   await configureDependencies(
     onUnauthorized: () {
-      if (sl.isRegistered<AuthCubit>()) sl<AuthCubit>().logout();
+      if (sl.isRegistered<AuthCubit>()) sl<AuthCubit>().onSessionExpired();
     },
   );
 

@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'message_reaction.dart';
+
 import '../../../../core/extensions/json_extensions.dart';
 
 /// One message in a thread (direct/group/broadcast share this shape).
@@ -25,7 +27,49 @@ class ChatMessage extends Equatable {
     this.conversationId,
     this.order,
     this.createdAt,
+    this.replyToMessageId,
+    this.replyTo,
+    this.isDeleted = false,
+    this.isKept = false,
+    this.expiresAt,
+    this.editedAt,
+    this.myReaction,
+    this.reactions = const [],
   });
+
+  final int? replyToMessageId;
+  final MessageReply? replyTo;
+  final bool isDeleted;
+  final bool isKept;
+  final DateTime? expiresAt;
+  final DateTime? editedAt;
+  final String? myReaction;
+  final List<MessageReaction> reactions;
+  bool get canInteract => id > 0 && !isSystem && !isDeleted && !isOrder;
+  bool hasExpired([DateTime? now]) =>
+      !isKept &&
+      expiresAt != null &&
+      !expiresAt!.isAfter(now ?? DateTime.now());
+  String get preview => isDeleted
+      ? 'This message was deleted'
+      : (body?.isNotEmpty == true
+            ? body!
+            : hasImage
+            ? 'Photo'
+            : isLocation
+            ? 'Location'
+            : attachmentKind == 'audio'
+            ? 'Voice message'
+            : attachmentName ?? 'Attachment');
+  ChatMessage deleted() => ChatMessage(
+    id: id,
+    body: null,
+    senderId: senderId,
+    senderName: senderName,
+    conversationId: conversationId,
+    createdAt: createdAt,
+    isDeleted: true,
+  );
 
   final int id;
   final String? body;
@@ -82,8 +126,10 @@ class ChatMessage extends Equatable {
   /// remarks with the price appended, e.g. "offer test\n\nOffer price:
   /// 157,852.00" (there is no dedicated offer message type). This matches that
   /// trailing price line so the message can render as a distinct offer bubble.
-  static final RegExp _offerPriceRe =
-      RegExp(r'(?:\n|^)\s*offer price:\s*(.+?)\s*$', caseSensitive: false);
+  static final RegExp _offerPriceRe = RegExp(
+    r'(?:\n|^)\s*offer price:\s*(.+?)\s*$',
+    caseSensitive: false,
+  );
 
   /// Whether this message is an offer (remarks + an "Offer price:" line).
   bool get isOffer =>
@@ -94,7 +140,8 @@ class ChatMessage extends Equatable {
       _offerPriceRe.hasMatch(body ?? '');
 
   /// The offer's price portion, e.g. "157,852.00". Null when absent.
-  String? get offerPrice => _offerPriceRe.firstMatch(body ?? '')?.group(1)?.trim();
+  String? get offerPrice =>
+      _offerPriceRe.firstMatch(body ?? '')?.group(1)?.trim();
 
   /// The offer's remarks — the body with the trailing price line removed.
   /// Null when the offer carried no remarks.
@@ -114,28 +161,45 @@ class ChatMessage extends Equatable {
   /// True when this message was sent by [meId] (drives bubble alignment).
   bool isMine(int? meId) => meId != null && senderId == meId;
 
-  ChatMessage copyWith({bool? isStarred}) => ChatMessage(
-        id: id,
-        body: body,
-        senderId: senderId,
-        senderName: senderName,
-        imageUrl: imageUrl,
-        attachmentKind: attachmentKind,
-        attachmentUrl: attachmentUrl,
-        attachmentName: attachmentName,
-        isBroadcast: isBroadcast,
-        isSystem: isSystem,
-        isStarred: isStarred ?? this.isStarred,
-        isInquiry: isInquiry,
-        inquiryPrice: inquiryPrice,
-        isLocation: isLocation,
-        locationLabel: locationLabel,
-        latitude: latitude,
-        longitude: longitude,
-        conversationId: conversationId,
-        order: order,
-        createdAt: createdAt,
-      );
+  ChatMessage copyWith({
+    bool? isStarred,
+    bool? isKept,
+    bool clearExpiry = false,
+    DateTime? expiresAt,
+    List<MessageReaction>? reactions,
+    String? myReaction,
+    bool clearReaction = false,
+    MessageReply? replyTo,
+  }) => ChatMessage(
+    id: id,
+    body: body,
+    senderId: senderId,
+    senderName: senderName,
+    imageUrl: imageUrl,
+    attachmentKind: attachmentKind,
+    attachmentUrl: attachmentUrl,
+    attachmentName: attachmentName,
+    isBroadcast: isBroadcast,
+    isSystem: isSystem,
+    isStarred: isStarred ?? this.isStarred,
+    isInquiry: isInquiry,
+    inquiryPrice: inquiryPrice,
+    isLocation: isLocation,
+    locationLabel: locationLabel,
+    latitude: latitude,
+    longitude: longitude,
+    conversationId: conversationId,
+    order: order,
+    createdAt: createdAt,
+    replyToMessageId: replyToMessageId,
+    replyTo: replyTo ?? this.replyTo,
+    isDeleted: isDeleted,
+    isKept: isKept ?? this.isKept,
+    expiresAt: clearExpiry ? null : expiresAt ?? this.expiresAt,
+    editedAt: editedAt,
+    myReaction: clearReaction ? null : myReaction ?? this.myReaction,
+    reactions: reactions ?? this.reactions,
+  );
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final sender = json.asMap('sender');
@@ -160,6 +224,16 @@ class ChatMessage extends Equatable {
     }
     return ChatMessage(
       id: json.asIntOr('id', 0),
+      replyToMessageId: json.asInt('reply_to_message_id'),
+      replyTo: json.asMap('reply_to') == null
+          ? null
+          : MessageReply.fromJson(json.asMap('reply_to')!),
+      isDeleted: json.asBool('is_deleted'),
+      isKept: json.asBool('is_kept'),
+      expiresAt: json.asDate('expires_at'),
+      editedAt: json.asDate('edited_at'),
+      myReaction: json.asString('my_reaction'),
+      reactions: MessageReaction.parse(json['reactions']),
       body: json.asString('body'),
       senderId: sender?.asInt('id'),
       senderName: sender?.asString('name'),
@@ -168,7 +242,7 @@ class ChatMessage extends Equatable {
       attachmentUrl: url,
       attachmentName: name,
       isBroadcast: json.asBool('is_broadcast'),
-      isSystem: type == 'system',
+      isSystem: type == 'system' && !json.asBool('is_deleted'),
       isStarred: json.asBool('is_starred'),
       isInquiry: type == 'inquiry',
       inquiryPrice: meta?.asString('price_formatted'),
@@ -184,27 +258,35 @@ class ChatMessage extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        body,
-        senderId,
-        senderName,
-        imageUrl,
-        attachmentKind,
-        attachmentUrl,
-        attachmentName,
-        isBroadcast,
-        isSystem,
-        isStarred,
-        isInquiry,
-        inquiryPrice,
-        isLocation,
-        locationLabel,
-        latitude,
-        longitude,
-        conversationId,
-        order,
-        createdAt,
-      ];
+    id,
+    body,
+    senderId,
+    senderName,
+    imageUrl,
+    attachmentKind,
+    attachmentUrl,
+    attachmentName,
+    isBroadcast,
+    isSystem,
+    isStarred,
+    isInquiry,
+    inquiryPrice,
+    isLocation,
+    locationLabel,
+    latitude,
+    longitude,
+    conversationId,
+    order,
+    createdAt,
+    replyToMessageId,
+    replyTo,
+    isDeleted,
+    isKept,
+    expiresAt,
+    editedAt,
+    myReaction,
+    reactions,
+  ];
 }
 
 /// Order payload attached to an order-type chat message (design "Chat · Order
@@ -238,4 +320,68 @@ class MessageOrder extends Equatable {
 
   @override
   List<Object?> get props => [id, number, status, amountCredits, title];
+}
+
+/// Shallow quote snapshot: no recursive message tree is retained.
+class MessageReply extends Equatable {
+  const MessageReply({
+    required this.id,
+    this.body,
+    this.senderName,
+    this.senderId,
+    this.isDeleted = false,
+    this.attachmentKind,
+    this.attachmentName,
+  });
+  final int id;
+  final String? body, senderName, attachmentKind, attachmentName;
+  final int? senderId;
+  final bool isDeleted;
+  String get preview => isDeleted
+      ? 'This message was deleted'
+      : body?.isNotEmpty == true
+      ? body!
+      : switch (attachmentKind) {
+          'image' => 'Photo',
+          'video' => 'Video',
+          'audio' => 'Voice message',
+          _ => attachmentName ?? 'Message',
+        };
+  factory MessageReply.fromJson(Map<String, dynamic> json) {
+    final attachments = json['attachments'];
+    final first =
+        attachments is List &&
+            attachments.isNotEmpty &&
+            attachments.first is Map
+        ? attachments.first as Map
+        : null;
+    return MessageReply(
+      id: json.asIntOr('id', 0),
+      body: json.asString('body'),
+      senderName: json.asMap('sender')?.asString('name'),
+      senderId: json.asMap('sender')?.asInt('id'),
+      isDeleted: json.asBool('is_deleted'),
+      attachmentKind: first?['kind'] as String?,
+      attachmentName: first?['original_name'] as String?,
+    );
+  }
+  factory MessageReply.fromMessage(ChatMessage message) => MessageReply(
+    id: message.id,
+    body: message.body,
+    senderName: message.senderName,
+    senderId: message.senderId,
+    isDeleted: message.isDeleted,
+    attachmentKind: message.hasImage ? 'image' : message.attachmentKind,
+    attachmentName: message.attachmentName,
+  );
+  @override
+  List<Object?> get props => [
+    id,
+    body,
+    senderName,
+    senderId,
+    isDeleted,
+    attachmentKind,
+    attachmentName,
+  ];
 }

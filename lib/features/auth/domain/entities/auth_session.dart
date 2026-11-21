@@ -15,7 +15,9 @@ class AuthSession extends Equatable {
     // already-unwrapped `data` object.
     final userJson = json['user'];
     return AuthSession(
-      user: User.fromJson(userJson is Map<String, dynamic> ? userJson : const {}),
+      user: User.fromJson(
+        userJson is Map<String, dynamic> ? userJson : const {},
+      ),
       token: json['token'] is String ? json['token'] as String : '',
     );
   }

@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../core/extensions/json_extensions.dart';
 import 'chat_label.dart';
+import 'disappearing_settings.dart';
 
 /// The three kinds of chat in Nexveero:
 /// - [direct]  — one-to-one (from GET /chats, type "direct")
@@ -13,10 +14,10 @@ enum ConversationType {
   broadcast;
 
   static ConversationType fromApi(String? raw) => switch (raw) {
-        'group' => ConversationType.group,
-        'broadcast' => ConversationType.broadcast,
-        _ => ConversationType.direct,
-      };
+    'group' => ConversationType.group,
+    'broadcast' => ConversationType.broadcast,
+    _ => ConversationType.direct,
+  };
 }
 
 /// A single inbox row, normalized so direct/group (GET /chats) and broadcast
@@ -28,6 +29,7 @@ class Conversation extends Equatable {
     required this.type,
     required this.title,
     this.subtitle,
+    this.isSelf = false,
     this.avatarUrl,
     this.peerId,
     this.groupId,
@@ -38,14 +40,17 @@ class Conversation extends Equatable {
     this.canChat = true,
     this.isPinned = false,
     this.labels = const [],
+    this.disappearing = const DisappearingSettings(),
   });
 
   /// For direct/group this is the conversation id (used by
   /// /conversations/{id}/…). For broadcast it is the broadcast-list id (used by
   /// /broadcasts/{id}/…). [type] tells callers which endpoint family to use.
+  final DisappearingSettings disappearing;
   final int id;
   final ConversationType type;
   final String title;
+  final bool isSelf;
   final String? subtitle;
   final String? avatarUrl;
 
@@ -81,19 +86,26 @@ class Conversation extends Equatable {
     return Conversation(
       id: json.asIntOr('conversation_id', json.asIntOr('id', 0)),
       type: ConversationType.fromApi(json.asString('type')),
-      title: json.asStringOr('title', 'Conversation'),
-      subtitle: json.asString('subtitle'),
-      avatarUrl: json.asString('avatar_url') ??
+      title: json.asBool('is_self')
+          ? 'You (Notes)'
+          : json.asStringOr('title', 'Conversation'),
+      isSelf: json.asBool('is_self'),
+      subtitle:
+          json.asMap('peer')?.asString('business_name') ??
+          json.asString('subtitle'),
+      avatarUrl:
+          json.asString('avatar_url') ??
           json.asMap('peer')?.asString('avatar_url'),
       peerId: json.asMap('peer')?.asInt('id'),
       groupId: json.asInt('group_id'),
       loadId: json.asInt('load_id') ?? json.asMap('load')?.asInt('id'),
       lastMessage: _preview(last),
       lastMessageAt: last?.asDate('created_at'),
-      unreadCount: json.asIntOr('unread_count', 0),
+      unreadCount: json.asBool('is_self') ? 0 : json.asIntOr('unread_count', 0),
       canChat: json.asBool('can_chat', fallback: true),
       isPinned: json.asBool('is_pinned'),
       labels: _labelsFrom(json['labels']),
+      disappearing: DisappearingSettings.fromJson(json),
     );
   }
 
@@ -108,11 +120,23 @@ class Conversation extends Equatable {
   /// Parses a POST /chats response (start/reopen a 1:1) into a Conversation
   /// good enough to open the thread: id + peer name/avatar.
   factory Conversation.fromStartChatJson(Map<String, dynamic> json) {
+    final nested = json.asMap('conversation');
+    if (nested != null) {
+      return Conversation.fromChatJson({
+        ...nested,
+        'is_self': json['is_self'] ?? nested['is_self'],
+        'peer': nested['peer'] ?? json['peer'],
+      });
+    }
     final peer = json.asMap('peer');
     return Conversation(
       id: json.asIntOr('conversation_id', json.asIntOr('id', 0)),
       type: ConversationType.fromApi(json.asString('type')),
-      title: peer?.asStringOr('name', 'Chat') ?? 'Chat',
+      title: json.asBool('is_self')
+          ? 'You (Notes)'
+          : peer?.asStringOr('name', 'Chat') ?? 'Chat',
+      isSelf: json.asBool('is_self'),
+      subtitle: peer?.asString('business_name'),
       avatarUrl: peer?.asString('avatar_url'),
       peerId: peer?.asInt('id'),
       canChat: true,
@@ -160,19 +184,21 @@ class Conversation extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        type,
-        title,
-        subtitle,
-        avatarUrl,
-        peerId,
-        groupId,
-        loadId,
-        lastMessage,
-        lastMessageAt,
-        unreadCount,
-        canChat,
-        isPinned,
-        labels,
-      ];
+    id,
+    type,
+    title,
+    isSelf,
+    subtitle,
+    avatarUrl,
+    peerId,
+    groupId,
+    loadId,
+    lastMessage,
+    lastMessageAt,
+    unreadCount,
+    canChat,
+    isPinned,
+    labels,
+    disappearing,
+  ];
 }

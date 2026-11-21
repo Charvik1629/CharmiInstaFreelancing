@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/models/user.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/di/injection.dart';
+import '../cubit/auth_cubit.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/widgets.dart';
@@ -38,8 +40,9 @@ class PendingApprovalPage extends StatelessWidget {
                   height: 96,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: (isRejected ? nex.warning : nex.teal)
-                        .withValues(alpha: 0.14),
+                    color: (isRejected ? nex.warning : nex.teal).withValues(
+                      alpha: 0.14,
+                    ),
                   ),
                   child: Icon(
                     isRejected
@@ -51,7 +54,9 @@ class PendingApprovalPage extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  isRejected ? 'Account not approved' : 'Pending admin approval',
+                  isRejected
+                      ? 'Account not approved'
+                      : 'Pending admin approval',
                   style: texts.displayLarge,
                   textAlign: TextAlign.center,
                 ),
@@ -59,11 +64,11 @@ class PendingApprovalPage extends StatelessWidget {
                 Text(
                   isRejected
                       ? 'Your account was not approved. Please contact support '
-                          'if you believe this is a mistake.'
+                            'if you believe this is a mistake.'
                       : 'Thanks for registering${business != null ? ', $business' : ''}. '
-                          'A Nexveero admin is reviewing your details. You can '
-                          'log in once your account is approved — this usually '
-                          'takes a little while.',
+                            'A Nexveero admin is reviewing your details. You can '
+                            'sign in now to complete your business details and explore. '
+                            'Creating posts becomes available after approval.',
                   style: texts.bodyLarge?.copyWith(color: nex.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -78,14 +83,18 @@ class PendingApprovalPage extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline, size: 20, color: nex.iconInactive),
+                        Icon(
+                          Icons.info_outline,
+                          size: 20,
+                          color: nex.iconInactive,
+                        ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
                           child: Text(
-                            'While you wait, you can explore how Nexveero works '
-                            'from the app tour.',
-                            style: texts.bodyMedium
-                                ?.copyWith(color: nex.textSecondary),
+                            'Sign in to browse and complete your business profile. Chat, Ask and Offer unlock after approval.',
+                            style: texts.bodyMedium?.copyWith(
+                              color: nex.textSecondary,
+                            ),
                           ),
                         ),
                       ],
@@ -94,7 +103,10 @@ class PendingApprovalPage extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xl),
                 AppButton(
                   label: 'Back to login',
-                  onPressed: () => context.go(AppRoutes.login),
+                  onPressed: () async {
+                    if (sl.isRegistered<AuthCubit>() && sl<AuthCubit>().state.isAuthenticated) await sl<AuthCubit>().logout();
+                    if (context.mounted) context.go(AppRoutes.login);
+                  },
                 ),
               ],
             ),

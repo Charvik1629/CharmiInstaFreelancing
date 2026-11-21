@@ -50,6 +50,7 @@ class SearchCubit extends Cubit<SearchState> {
     if (q.length < _minChars) return;
     emit(state.copyWith(status: SearchStatus.searching));
     final result = await _repository.searchUsers(q);
+    if (isClosed || state.query.trim() != q) return;
     switch (result) {
       case Success(value: final users):
         _remember(q);

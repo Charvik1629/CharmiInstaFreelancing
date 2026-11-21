@@ -1,3 +1,7 @@
+import '../../domain/entities/message_reaction.dart';
+import '../../domain/entities/disappearing_settings.dart';
+import '../../domain/entities/shared_content.dart';
+
 import 'package:dio/dio.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
@@ -12,7 +16,11 @@ import '../../domain/entities/unread_counts.dart';
 
 /// A cursor page of messages (the API paginates newest-first with `before_id`).
 class MessagePage {
-  const MessagePage({required this.items, this.hasMore = false, this.nextBeforeId});
+  const MessagePage({
+    required this.items,
+    this.hasMore = false,
+    this.nextBeforeId,
+  });
   final List<ChatMessage> items;
   final bool hasMore;
   final int? nextBeforeId;
@@ -21,8 +29,19 @@ class MessagePage {
 /// Raw chat endpoint calls spanning all three chat kinds. Direct/group live
 /// under /chats + /conversations; broadcasts under /broadcasts.
 abstract class ChatRemoteDataSource {
+  Future<SharedContent> getShared(
+    int conversationId, {
+    String type = 'media',
+    int page = 1,
+  });
+
   /// GET /chats — direct + group conversations (WhatsApp-style inbox).
-  Future<List<Conversation>> getChats({String? hasMedia, bool hasLinks, String? q});
+  Future<List<Conversation>> getChats({
+    String? hasMedia,
+    bool hasLinks,
+    String? q,
+    String? kind,
+  });
 
   /// GET /broadcasts — the user's broadcast lists.
   Future<List<Conversation>> getBroadcasts();
@@ -47,6 +66,7 @@ abstract class ChatRemoteDataSource {
     required ConversationType type,
     String body = '',
     List<String> attachmentPaths = const [],
+    int? replyToMessageId,
   });
 
   /// GET /broadcasts/{id}/messages?per_page=1 — reads only `meta.
@@ -55,12 +75,37 @@ abstract class ChatRemoteDataSource {
   Future<BroadcastQuota?> getBroadcastQuota(int id);
 
   /// PATCH /conversations/{id}/messages/{msgId} — edit a text message (≤1h).
-  Future<ChatMessage> editMessage(int conversationId, int messageId, String body);
+  Future<ChatMessage> editMessage(
+    int conversationId,
+    int messageId,
+    String body,
+  );
 
   /// DELETE /conversations/{id}/messages/{msgId} — delete a message (≤24h).
-  Future<void> deleteMessage(int conversationId, int messageId);
-  Future<void> starMessage(int conversationId, int messageId,
-      {required bool star});
+  Future<void> deleteMessage(
+    int conversationId,
+    int messageId, {
+    MessageDeleteScope scope = MessageDeleteScope.everyone,
+  });
+  Future<ReactionUpdate> react(
+    int conversationId,
+    int messageId,
+    String? emoji,
+  );
+  Future<ChatMessage> keepMessage(int conversationId, int messageId);
+  Future<void> deleteConversation(int conversationId);
+  Future<Conversation> getConversation(int conversationId);
+  Future<List<DisappearingDuration>> getDisappearingOptions();
+  Future<DisappearingUpdate> setDisappearing(
+    int conversationId, {
+    required bool enabled,
+    int? hours,
+  });
+  Future<void> starMessage(
+    int conversationId,
+    int messageId, {
+    required bool star,
+  });
   Future<void> pinConversation(int conversationId, {required bool pin});
   Future<List<ChatMessage>> getStarredMessages();
 
@@ -69,6 +114,7 @@ abstract class ChatRemoteDataSource {
     required int conversationId,
     required String type,
     required Map<String, dynamic> meta,
+    int? replyToMessageId,
   });
 
   /// POST /conversations/{id}/messages with `type: inquiry` — a one-to-one
@@ -78,6 +124,7 @@ abstract class ChatRemoteDataSource {
     required int conversationId,
     required String body,
     String? price,
+    int? replyToMessageId,
   });
 
   /// POST /users/{id}/block — block a user.
@@ -125,11 +172,29 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   final ApiClient _client;
 
   @override
-  Future<List<Conversation>> getChats(
-      {String? hasMedia, bool hasLinks = false, String? q}) async {
+  Future<SharedContent> getShared(
+    int conversationId, {
+    String type = 'media',
+    int page = 1,
+  }) async {
+    final response = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.conversationShared(conversationId),
+      query: {'type': type, 'page': page, 'per_page': 20},
+    );
+    return SharedContent.fromResponse(response.data ?? {});
+  }
+
+  @override
+  Future<List<Conversation>> getChats({
+    String? hasMedia,
+    bool hasLinks = false,
+    String? q,
+    String? kind,
+  }) async {
     final res = await _client.get<Map<String, dynamic>>(
       ApiEndpoints.chats,
       query: {
+        'type': ?kind,
         'has_media': ?hasMedia,
         if (hasLinks) 'has_links': 1,
         if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
@@ -140,7 +205,9 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
   @override
   Future<List<Conversation>> getBroadcasts() async {
-    final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.broadcasts);
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.broadcasts,
+    );
     return _list(res.data, Conversation.fromBroadcastJson);
   }
 
@@ -179,6 +246,7 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     required ConversationType type,
     String body = '',
     List<String> attachmentPaths = const [],
+    int? replyToMessageId,
   }) async {
     final path = type == ConversationType.broadcast
         ? ApiEndpoints.broadcastMessages(id)
@@ -189,13 +257,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       // The API accepts up to 5 files as an attachments[] array.
       data = FormData.fromMap({
         if (body.isNotEmpty) 'body': body,
+        'reply_to_message_id': ?replyToMessageId,
         'attachments[]': [
           for (final p in attachmentPaths)
             await MultipartFile.fromFile(p, filename: p.split('/').last),
         ],
       });
     } else {
-      data = {'body': body};
+      data = {'body': body, 'reply_to_message_id': ?replyToMessageId};
     }
 
     final res = await _client.post<Map<String, dynamic>>(path, data: data);
@@ -208,14 +277,16 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       ApiEndpoints.broadcastMessages(id),
       query: {'per_page': 1},
     );
-    final quota =
-        res.data?.asMap('meta')?.asMap('broadcast_message_quota');
+    final quota = res.data?.asMap('meta')?.asMap('broadcast_message_quota');
     return quota == null ? null : BroadcastQuota.fromJson(quota);
   }
 
   @override
   Future<ChatMessage> editMessage(
-      int conversationId, int messageId, String body) async {
+    int conversationId,
+    int messageId,
+    String body,
+  ) async {
     final res = await _client.patch<Map<String, dynamic>>(
       ApiEndpoints.conversationMessage(conversationId, messageId),
       data: {'body': body},
@@ -224,15 +295,90 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   }
 
   @override
-  Future<void> deleteMessage(int conversationId, int messageId) async {
+  Future<void> deleteMessage(
+    int conversationId,
+    int messageId, {
+    MessageDeleteScope scope = MessageDeleteScope.everyone,
+  }) async {
     await _client.delete<dynamic>(
-        ApiEndpoints.conversationMessage(conversationId, messageId));
+      ApiEndpoints.conversationMessage(conversationId, messageId),
+      data: {'for': scope.name},
+    );
   }
 
   @override
-  Future<void> starMessage(int conversationId, int messageId,
-      {required bool star}) async {
-    final path = ApiEndpoints.conversationMessageStar(conversationId, messageId);
+  Future<ReactionUpdate> react(
+    int conversationId,
+    int messageId,
+    String? emoji,
+  ) async {
+    final path = ApiEndpoints.messageReaction(conversationId, messageId);
+    final response = emoji == null
+        ? await _client.delete<Map<String, dynamic>>(path)
+        : await _client.put<Map<String, dynamic>>(path, data: {'emoji': emoji});
+    return ApiEnvelope.object(response.data, ReactionUpdate.fromJson);
+  }
+
+  @override
+  Future<ChatMessage> keepMessage(int conversationId, int messageId) async {
+    final response = await _client.post<Map<String, dynamic>>(
+      ApiEndpoints.messageKeep(conversationId, messageId),
+    );
+    return ApiEnvelope.object(response.data, ChatMessage.fromJson);
+  }
+
+  @override
+  Future<void> deleteConversation(int conversationId) async {
+    await _client.delete<dynamic>(ApiEndpoints.conversation(conversationId));
+  }
+
+  @override
+  Future<Conversation> getConversation(int conversationId) async {
+    final response = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.conversation(conversationId),
+    );
+    return ApiEnvelope.object(response.data, Conversation.fromChatJson);
+  }
+
+  @override
+  Future<List<DisappearingDuration>> getDisappearingOptions() async {
+    final response = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.disappearingOptions,
+    );
+    final data = response.data?['data'];
+    final items = data is Map ? data['durations'] : null;
+    return [
+      for (final item in items is List ? items : const [])
+        if (item is Map<String, dynamic>) DisappearingDuration.fromJson(item),
+    ];
+  }
+
+  @override
+  Future<DisappearingUpdate> setDisappearing(
+    int conversationId, {
+    required bool enabled,
+    int? hours,
+  }) async {
+    final response = await _client.put<Map<String, dynamic>>(
+      ApiEndpoints.conversationDisappearing(conversationId),
+      data: {
+        'enabled': enabled,
+        if (enabled && hours != null) 'duration_hours': hours,
+      },
+    );
+    return ApiEnvelope.object(response.data, DisappearingUpdate.fromJson);
+  }
+
+  @override
+  Future<void> starMessage(
+    int conversationId,
+    int messageId, {
+    required bool star,
+  }) async {
+    final path = ApiEndpoints.conversationMessageStar(
+      conversationId,
+      messageId,
+    );
     if (star) {
       await _client.post<dynamic>(path);
     } else {
@@ -264,10 +410,15 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     required int conversationId,
     required String type,
     required Map<String, dynamic> meta,
+    int? replyToMessageId,
   }) async {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.conversationMessages(conversationId),
-      data: {'type': type, 'meta': meta},
+      data: {
+        'type': type,
+        'meta': meta,
+        'reply_to_message_id': ?replyToMessageId,
+      },
     );
     return ApiEnvelope.object(res.data, ChatMessage.fromJson);
   }
@@ -277,12 +428,14 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     required int conversationId,
     required String body,
     String? price,
+    int? replyToMessageId,
   }) async {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.conversationMessages(conversationId),
       data: {
         'type': 'inquiry',
         'body': body,
+        'reply_to_message_id': ?replyToMessageId,
         if (price != null && price.isNotEmpty) 'meta': {'price': price},
       },
     );
@@ -301,8 +454,9 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
   @override
   Future<DateTime?> getPeerLastRead(int id) async {
-    final res =
-        await _client.get<Map<String, dynamic>>(ApiEndpoints.conversation(id));
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.conversation(id),
+    );
     final data = res.data?['data'];
     if (data is Map) return DateTime.tryParse('${data['peer_last_read_at']}');
     return null;
@@ -310,8 +464,9 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
   @override
   Future<UnreadCounts> getUnreadCounts() async {
-    final res =
-        await _client.get<Map<String, dynamic>>(ApiEndpoints.chatsUnreadCount);
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.chatsUnreadCount,
+    );
     return ApiEnvelope.object(res.data, UnreadCounts.fromJson);
   }
 
@@ -329,10 +484,7 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
   Future<Conversation> startChat(int userId, {String? pin}) async {
     final res = await _client.post<Map<String, dynamic>>(
       ApiEndpoints.chats,
-      data: {
-        'user_id': userId,
-        if (pin != null && pin.isNotEmpty) 'pin': pin,
-      },
+      data: {'user_id': userId, if (pin != null && pin.isNotEmpty) 'pin': pin},
     );
     return ApiEnvelope.object(res.data, Conversation.fromStartChatJson);
   }
@@ -341,16 +493,17 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
     required String name,
     String? color,
     required int sortOrder,
-  }) =>
-      {
-        'name': name,
-        if (color != null && color.isNotEmpty) 'color': color,
-        'sort_order': sortOrder,
-      };
+  }) => {
+    'name': name,
+    if (color != null && color.isNotEmpty) 'color': color,
+    'sort_order': sortOrder,
+  };
 
   @override
   Future<List<ChatLabel>> getLabels() async {
-    final res = await _client.get<Map<String, dynamic>>(ApiEndpoints.chatLabels);
+    final res = await _client.get<Map<String, dynamic>>(
+      ApiEndpoints.chatLabels,
+    );
     return _list(res.data, ChatLabel.fromJson);
   }
 
@@ -388,14 +541,16 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
 
   @override
   Future<void> attachLabel(int conversationId, int labelId) async {
-    await _client
-        .post<dynamic>(ApiEndpoints.conversationLabel(conversationId, labelId));
+    await _client.post<dynamic>(
+      ApiEndpoints.conversationLabel(conversationId, labelId),
+    );
   }
 
   @override
   Future<void> detachLabel(int conversationId, int labelId) async {
-    await _client
-        .delete<dynamic>(ApiEndpoints.conversationLabel(conversationId, labelId));
+    await _client.delete<dynamic>(
+      ApiEndpoints.conversationLabel(conversationId, labelId),
+    );
   }
 
   /// The messages/chats endpoints return `{ "data": [ ... ] }`; decode the

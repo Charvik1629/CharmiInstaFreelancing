@@ -76,7 +76,8 @@ class _ManageLabelsView extends StatelessWidget {
                 child: ListView.builder(
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   itemCount: state.labels.length,
-                  itemBuilder: (context, i) => _LabelRow(label: state.labels[i]),
+                  itemBuilder: (context, i) =>
+                      _LabelRow(label: state.labels[i]),
                 ),
               );
           }
@@ -110,7 +111,9 @@ class _LabelRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: nex.border),
@@ -124,10 +127,12 @@ class _LabelRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Text(label.name,
-                style: Theme.of(context).textTheme.titleSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            child: Text(
+              label.name,
+              style: Theme.of(context).textTheme.titleSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 20),

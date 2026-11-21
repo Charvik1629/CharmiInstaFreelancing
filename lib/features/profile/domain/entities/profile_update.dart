@@ -7,6 +7,7 @@
 /// them — until then the backend ignores the extra keys.
 class ProfileUpdate {
   const ProfileUpdate({
+    this.requireComplete = false,
     this.name,
     this.bio,
     this.phone,
@@ -28,6 +29,7 @@ class ProfileUpdate {
     this.logoPath,
   });
 
+  final bool requireComplete;
   final String? name;
   final String? bio;
   final String? phone;

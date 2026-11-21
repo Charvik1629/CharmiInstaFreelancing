@@ -76,18 +76,18 @@ class _RegisterViewState extends State<_RegisterView> {
     if (_formKey.currentState?.validate() ?? false) {
       final gstMode = _kyc == _KycMode.gst;
       context.read<RegisterCubit>().submit(
-            name: _name.text.trim(),
-            username: _username.text.trim().toLowerCase(),
-            businessName: _business.text.trim(),
-            phone: _phone.text.trim(),
-            email: _email.text.trim(),
-            gstNumber: gstMode ? _gst.text.trim().toUpperCase() : null,
-            panNumber: gstMode ? null : _pan.text.trim().toUpperCase(),
-            aadhaarNumber: gstMode ? null : _aadhaar.text.trim(),
-            referralCode: _referral.text.trim(),
-            password: _password.text,
-            passwordConfirmation: _confirm.text,
-          );
+        name: _name.text.trim(),
+        username: _username.text.trim().toLowerCase(),
+        businessName: _business.text.trim(),
+        phone: _phone.text.trim(),
+        email: _email.text.trim(),
+        gstNumber: gstMode ? _gst.text.trim().toUpperCase() : null,
+        panNumber: gstMode ? null : _pan.text.trim().toUpperCase(),
+        aadhaarNumber: gstMode ? null : _aadhaar.text.trim(),
+        referralCode: _referral.text.trim(),
+        password: _password.text,
+        passwordConfirmation: _confirm.text,
+      );
     }
   }
 
@@ -98,7 +98,7 @@ class _RegisterViewState extends State<_RegisterView> {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => context.go(AppRoutes.login)),
-        title: const Text('Create account'),
+        title: const Text('Join Nexveero'),
       ),
       body: BlocListener<RegisterCubit, AuthFormState>(
         listenWhen: (p, c) => p.status != c.status,
@@ -109,7 +109,9 @@ class _RegisterViewState extends State<_RegisterView> {
             context.go(AppRoutes.pendingApproval, extra: state.user);
           } else if (state.status == FormStatus.failure) {
             AppOverlays.snack(
-                context, state.errorMessage ?? 'Could not create account');
+              context,
+              state.errorMessage ?? 'Could not create account',
+            );
           }
         },
         child: SafeArea(
@@ -121,9 +123,10 @@ class _RegisterViewState extends State<_RegisterView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Register your business to join Nexveero.',
-                    style: texts.bodyLarge
-                        ?.copyWith(color: context.nexveero.textSecondary),
+                    'Create your account and bring your business closer to new opportunities.',
+                    style: texts.bodyLarge?.copyWith(
+                      color: context.nexveero.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   BlocBuilder<RegisterCubit, AuthFormState>(
@@ -251,7 +254,9 @@ class _RegisterViewState extends State<_RegisterView> {
         segments: const [
           ButtonSegment(value: _KycMode.gst, label: Text('GST')),
           ButtonSegment(
-              value: _KycMode.panAadhaar, label: Text('PAN + Aadhaar')),
+            value: _KycMode.panAadhaar,
+            label: Text('PAN + Aadhaar'),
+          ),
         ],
         selected: {_kyc},
         onSelectionChanged: (s) => setState(() => _kyc = s.first),

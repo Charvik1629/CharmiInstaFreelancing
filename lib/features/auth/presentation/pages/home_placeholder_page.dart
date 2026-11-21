@@ -26,17 +26,24 @@ class HomePlaceholderPage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Signed in', style: Theme.of(context).textTheme.headlineMedium),
+            Text(
+              'Signed in',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
             const SizedBox(height: AppSpacing.sm),
-            Text(user?.name ?? '—',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              user?.name ?? '—',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             if (user?.email != null) ...[
               const SizedBox(height: AppSpacing.xs),
               Text(user!.email!),
             ],
             const SizedBox(height: AppSpacing.lg),
-            Text('Feed arrives in Module 5',
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              'Feed arrives in Module 5',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),

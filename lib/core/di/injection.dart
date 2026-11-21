@@ -110,6 +110,7 @@ Future<void> configureDependencies({void Function()? onUnauthorized}) async {
   // Storage must be created async first.
   final storage = await StorageManager.create();
   sl.registerSingleton<StorageManager>(storage);
+  await AuthRemoteDataSourceImpl.initializeInstallation(storage);
 
   sl.registerLazySingleton<NetworkInfo>(
     () => NetworkInfo(Connectivity()),
@@ -141,7 +142,7 @@ void registerFeatureDependencies() {
 
   // Auth.
   sl.registerLazySingleton<AuthRemoteDataSource>(
-    () => AuthRemoteDataSourceImpl(sl<ApiClient>()),
+    () => AuthRemoteDataSourceImpl(sl<ApiClient>(), sl<StorageManager>()),
   );
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(sl<AuthRemoteDataSource>(), sl<StorageManager>()),

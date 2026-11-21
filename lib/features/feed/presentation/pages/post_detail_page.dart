@@ -1,3 +1,6 @@
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../chat/presentation/pages/location_view_page.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -319,7 +322,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         Row(
                           children: [
                             Flexible(
-                              child: Text(load.author?.name ?? 'Unknown',
+                              child: Text(load.author?.displayBusinessName ?? 'Unknown',
                                   style: texts.titleMedium,
                                   overflow: TextOverflow.ellipsis),
                             ),
@@ -355,6 +358,10 @@ class _PostDetailPageState extends State<PostDetailPage> {
               aspectRatio: 1,
               child: ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
             ),
+          if (load.location != null) TextButton.icon(
+            icon: const Icon(Icons.location_on_outlined), label: Text(load.location!.label ?? 'View location'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) =>
+              LocationViewPage(lat: load.location!.lat, lng: load.location!.lng, label: load.location!.label)))),
           // Action row — Ask · Share · Offer · Report (owner: status line).
           if (load.isOwn)
             Padding(
@@ -368,7 +375,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
               child: Row(
                 children: [
-                  if (load.canAskQuestion)
+                  if (load.canAskQuestion && (context.watch<AuthCubit>().state.user?.canAsk ?? false))
                     Expanded(
                       child: _ActionIcon(
                           icon: Icons.help_outline,
@@ -382,14 +389,14 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         label: 'Share',
                         onTap: () => _share(context)),
                   ),
-                  if (load.hasMyOffer)
+                  if (load.hasMyOffer && (context.watch<AuthCubit>().state.user?.canChat ?? false))
                     Expanded(
                       child: _ActionIcon(
                           icon: Icons.local_offer,
                           label: 'View offer',
                           onTap: () => _viewOffer(context)),
                     )
-                  else if (load.canMakeOffer)
+                  else if (load.canMakeOffer && (context.watch<AuthCubit>().state.user?.canOffer ?? false))
                     Expanded(
                       child: _ActionIcon(
                           icon: Icons.sell_outlined,

@@ -1,3 +1,5 @@
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,7 +26,9 @@ import '../widgets/report_sheet.dart';
 /// The home feed. Lists posts (loads) with filters, pull-to-refresh and
 /// infinite scroll, and handles the per-post actions.
 class FeedPage extends StatelessWidget {
-  const FeedPage({super.key, this.reselect});
+  const FeedPage({super.key, this.reselect, this.createButtonKey});
+
+  final GlobalKey? createButtonKey;
 
   /// Bumped by the shell when the Home tab is tapped while already active →
   /// refresh + scroll to top.
@@ -34,13 +38,15 @@ class FeedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => sl<FeedCubit>()..load(),
-      child: _FeedView(reselect: reselect),
+      child: _FeedView(reselect: reselect, createButtonKey: createButtonKey),
     );
   }
 }
 
 class _FeedView extends StatefulWidget {
-  const _FeedView({this.reselect});
+  const _FeedView({this.reselect, this.createButtonKey});
+
+  final GlobalKey? createButtonKey;
 
   final ValueListenable<int>? reselect;
 
@@ -69,8 +75,11 @@ class _FeedViewState extends State<_FeedView> {
   void _onReselect() {
     if (!mounted) return;
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(0,
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
     context.read<FeedCubit>().refresh();
   }
@@ -92,8 +101,11 @@ class _FeedViewState extends State<_FeedView> {
 
   Future<void> _offer(Load load) async {
     final feed = context.read<FeedCubit>();
-    final result = await MakeOfferSheet.show(context,
-        loadId: load.id, loadTitle: load.title);
+    final result = await MakeOfferSheet.show(
+      context,
+      loadId: load.id,
+      loadTitle: load.title,
+    );
     if (result == null || !mounted) return;
     // Flip the card to "View offer" and remember the opened thread.
     feed.markOffered(load, result.conversationId);
@@ -153,8 +165,10 @@ class _FeedViewState extends State<_FeedView> {
     if (body == null || body.isEmpty || !mounted) return;
     final result = await context.read<FeedCubit>().ask(load, body);
     if (!mounted) return;
-    AppOverlays.snack(context,
-        result.isSuccess ? 'Question sent' : 'Could not send question');
+    AppOverlays.snack(
+      context,
+      result.isSuccess ? 'Question sent' : 'Could not send question',
+    );
   }
 
   Future<void> _share(Load load) async {
@@ -191,7 +205,9 @@ class _FeedViewState extends State<_FeedView> {
     if (!mounted) return;
     AppOverlays.snack(
       context,
-      result.isSuccess ? 'Report submitted' : (result.failureOrNull?.message ?? 'Failed'),
+      result.isSuccess
+          ? 'Report submitted'
+          : (result.failureOrNull?.message ?? 'Failed'),
     );
   }
 
@@ -206,7 +222,10 @@ class _FeedViewState extends State<_FeedView> {
     if (!confirmed || !mounted) return;
     final result = await context.read<FeedCubit>().delete(load);
     if (!mounted) return;
-    AppOverlays.snack(context, result.isSuccess ? 'Post deleted' : 'Delete failed');
+    AppOverlays.snack(
+      context,
+      result.isSuccess ? 'Post deleted' : 'Delete failed',
+    );
   }
 
   Future<void> _boost(Load load) async {
@@ -253,9 +272,12 @@ class _FeedViewState extends State<_FeedView> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          key: widget.createButtonKey,
           icon: const Icon(Icons.add_box_outlined),
           tooltip: 'Create post',
-          onPressed: _createPost,
+          onPressed: context.watch<AuthCubit>().state.user?.canPost == true
+              ? _createPost
+              : null,
         ),
         centerTitle: true,
         title: _GradientWordmark(),
@@ -323,7 +345,11 @@ class _FeedSearchBarState extends State<_FeedSearchBar> {
     final nex = context.nexveero;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         decoration: BoxDecoration(
@@ -345,7 +371,7 @@ class _FeedSearchBarState extends State<_FeedSearchBar> {
                 decoration: const InputDecoration(
                   isDense: true,
                   filled: false,
-                  hintText: 'Search posts…',
+                  hintText: 'Search posts, products & businesses…',
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -380,7 +406,10 @@ class _FilterBar extends StatelessWidget {
       height: 52,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
         children: [
           for (final f in FeedFilter.values)
             Padding(
@@ -479,8 +508,10 @@ class _FeedBody extends StatelessWidget {
                 onShare: () => onShare(load),
                 onDirectMessage: () => onDirectMessage(load),
                 onTap: () async {
-                  final r =
-                      await context.push(AppRoutes.postDetail, extra: load);
+                  final r = await context.push(
+                    AppRoutes.postDetail,
+                    extra: load,
+                  );
                   if (!context.mounted) return;
                   final cubit = context.read<FeedCubit>();
                   if (r is Load) {
@@ -491,13 +522,17 @@ class _FeedBody extends StatelessWidget {
                 },
                 onAuthorTap: load.author?.id == null
                     ? null
-                    : () => context.push(AppRoutes.userProfile,
-                        extra: load.author!.id),
+                    : () => context.push(
+                        AppRoutes.userProfile,
+                        extra: load.author!.id,
+                      ),
                 onBoost: () => onBoost(load),
                 onMarkSold: () => onMarkSold(load),
                 onEditDeferred: () async {
                   final updated = await context.push<Load>(
-                      AppRoutes.createPost, extra: load);
+                    AppRoutes.createPost,
+                    extra: load,
+                  );
                   if (updated != null && context.mounted) {
                     context.read<FeedCubit>().replaceLoad(updated);
                   }
@@ -514,14 +549,15 @@ class _GradientWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShaderMask(
-      shaderCallback: (rect) => context.nexveero.primaryGradient.createShader(rect),
+      shaderCallback: (rect) =>
+          context.nexveero.primaryGradient.createShader(rect),
       child: Text(
         // Design "Home Feed" wordmark is the section label "Post" (the Business
         // feed likewise uses "Business"), rendered in the primary gradient.
-        'Post',
-        style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.white),
+        'Discover',
+        style: Theme.of(context).textTheme.headlineMedium
+            ?.copyWith(color: Colors.white),
       ),
     );
   }
 }
-

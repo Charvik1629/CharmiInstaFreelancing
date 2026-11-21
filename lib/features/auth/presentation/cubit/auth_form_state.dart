@@ -52,6 +52,12 @@ class AuthFormState extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [status, errorMessage, fieldErrors, session, user, forbidden];
+  List<Object?> get props => [
+    status,
+    errorMessage,
+    fieldErrors,
+    session,
+    user,
+    forbidden,
+  ];
 }

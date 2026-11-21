@@ -24,6 +24,7 @@ class _TagPickerSheetState extends State<TagPickerSheet> {
   late final TagRepository _repo = sl<TagRepository>();
   List<Tag> _all = const [];
   final Set<int> _selected = {};
+  String _query = '';
   bool _loading = true;
   String? _error;
 
@@ -56,9 +57,8 @@ class _TagPickerSheetState extends State<TagPickerSheet> {
   }
 
   void _done() {
-    Navigator.of(context).pop(
-      _all.where((t) => _selected.contains(t.id)).toList(),
-    );
+    Navigator.of(context)
+        .pop(_all.where((t) => _selected.contains(t.id)).toList());
   }
 
   @override
@@ -68,7 +68,24 @@ class _TagPickerSheetState extends State<TagPickerSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Add tags', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: AppSpacing.md),
+        TextField(
+          decoration: const InputDecoration(
+            hintText: 'Search tags…',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (value) =>
+              setState(() => _query = value.trim().toLowerCase()),
+        ),
         const SizedBox(height: AppSpacing.lg),
+        if (!_loading &&
+            _error == null &&
+            _all.isNotEmpty &&
+            !_all.any((t) => t.name.toLowerCase().contains(_query)))
+          const Padding(
+            padding: EdgeInsets.all(AppSpacing.md),
+            child: Text('No matching tags.'),
+          ),
         if (_loading)
           const Padding(
             padding: EdgeInsets.all(AppSpacing.xl),
@@ -77,14 +94,18 @@ class _TagPickerSheetState extends State<TagPickerSheet> {
         else if (_error != null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-            child: Text(_error!,
-                style: TextStyle(color: context.nexveero.textSecondary)),
+            child: Text(
+              _error!,
+              style: TextStyle(color: context.nexveero.textSecondary),
+            ),
           )
         else if (_all.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-            child: Text('No tags available.',
-                style: TextStyle(color: context.nexveero.textSecondary)),
+            child: Text(
+              'No tags available.',
+              style: TextStyle(color: context.nexveero.textSecondary),
+            ),
           )
         else
           ConstrainedBox(
@@ -96,7 +117,9 @@ class _TagPickerSheetState extends State<TagPickerSheet> {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: [
-                  for (final t in _all)
+                  for (final t in _all.where(
+                    (t) => t.name.toLowerCase().contains(_query),
+                  ))
                     FilterChip(
                       label: Text(t.name),
                       selected: _selected.contains(t.id),

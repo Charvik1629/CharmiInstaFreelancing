@@ -2,6 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../chat/presentation/pages/location_view_page.dart';
+import '../../../../core/di/injection.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../../core/extensions/date_extensions.dart';
 import '../../../../core/models/load.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -72,89 +75,107 @@ class PostCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: nexveero.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Header(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold, onAuthorTap: onAuthorTap),
-          // Media with a Buy/Sell type badge in the corner.
-          if (load.imageMedia.isNotEmpty || load.hasImage)
-            Stack(
-              children: [
-                if (load.imageMedia.isNotEmpty)
-                  _MediaCarousel(items: load.imageMedia)
-                else
-                  _Media(url: load.mediaUrl!),
-                if (load.postType != null)
-                  Positioned(
-                    top: AppSpacing.sm,
-                    left: AppSpacing.sm,
-                    child: _TypeBadge(load.postType!.name),
-                  ),
-              ],
-            )
-          else if (load.hasFile)
-            _FileChip(load: load),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (load.title.isNotEmpty)
-                  Text(load.title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                if ((load.body ?? '').isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(load.body!, style: Theme.of(context).textTheme.bodyMedium),
-                ],
-                if (load.tags.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final t in load.tags)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: context.nexveero.elevated,
-                            borderRadius: BorderRadius.circular(AppRadius.full),
-                          ),
-                          child: Text('#${t.name}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(color: context.nexveero.textSecondary)),
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.md),
-                _Actions(
-                  load: load,
-                  onRequest: onRequest,
-                  onOffer: onOffer,
-                  onViewOffer: onViewOffer,
-                  onAsk: onAsk,
-                  onShare: onShare,
-                  onDirectMessage: onDirectMessage,
-                  onReport: onReport,
-                ),
-              ],
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: nexveero.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _Header(
+              load: load,
+              onReport: onReport,
+              onDelete: onDelete,
+              onEditDeferred: onEditDeferred,
+              onBoost: onBoost,
+              onMarkSold: onMarkSold,
+              onAuthorTap: onAuthorTap,
             ),
-          ),
-        ],
-      ),
+            // Media with a Buy/Sell type badge in the corner.
+            if (load.imageMedia.isNotEmpty || load.hasImage)
+              Stack(
+                children: [
+                  if (load.imageMedia.isNotEmpty)
+                    _MediaCarousel(items: load.imageMedia)
+                  else
+                    _Media(url: load.mediaUrl!),
+                  if (load.postType != null)
+                    Positioned(
+                      top: AppSpacing.sm,
+                      left: AppSpacing.sm,
+                      child: _TypeBadge(load.postType!.name),
+                    ),
+                ],
+              )
+            else if (load.hasFile)
+              _FileChip(load: load),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PostCaption(load: load),
+                if (load.location != null) TextButton.icon(
+                  icon: const Icon(Icons.location_on_outlined, size: 16),
+                  label: Text(load.location!.label ?? 'View location'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => LocationViewPage(lat: load.location!.lat,
+                      lng: load.location!.lng, label: load.location!.label)))),
+                  if (load.tags.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final t in load.tags)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.full,
+                              ),
+                            ),
+                            child: Text(
+                              '#${t.name}',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
+                                  ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.md),
+                  _Actions(
+                    load: load,
+                    onRequest: onRequest,
+                    onOffer: onOffer,
+                    onViewOffer: onViewOffer,
+                    onAsk: onAsk,
+                    onShare: onShare,
+                    onDirectMessage: onDirectMessage,
+                    onReport: onReport,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -185,7 +206,7 @@ class _Header extends StatelessWidget {
     final nexveero = context.nexveero;
     final author = load.author;
     final meta = [
-      if (load.createdAt != null) load.createdAt!.timeAgo,
+      if (load.createdAt != null) load.createdAt!.feedTimeAgo,
       if (load.postType != null) load.postType!.name,
     ].join(' · ');
     // Tapping the author (avatar + name) opens their profile — disabled when
@@ -193,12 +214,21 @@ class _Header extends StatelessWidget {
     final canTapAuthor = onAuthorTap != null && author?.id != null;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.xs,
+        AppSpacing.sm,
+      ),
       child: Row(
         children: [
           GestureDetector(
             onTap: canTapAuthor ? onAuthorTap : null,
-            child: AppAvatar(name: author?.name ?? '?', imageUrl: author?.avatarUrl, size: 40),
+            child: AppAvatar(
+              name: author?.name ?? '?',
+              imageUrl: author?.avatarUrl,
+              size: 40,
+            ),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -211,24 +241,42 @@ class _Header extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(author?.name ?? 'Unknown',
-                            style: Theme.of(context).textTheme.titleMedium,
-                            overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          author?.displayBusinessName ?? 'Unknown',
+                          style: Theme.of(context).textTheme.titleSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      if (load.isBusiness || (load.author?.isVerified ?? false)) ...[
+                      if (load.isBusiness ||
+                          (load.author?.isVerified ?? false)) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.verified, size: 16, color: Theme.of(context).colorScheme.primary),
+                        Icon(
+                          Icons.verified,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ],
                     ],
                   ),
                   if (meta.isNotEmpty)
-                    Text(meta, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: nexveero.textSecondary)),
+                    Text(
+                      meta,
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: nexveero.textSecondary),
+                    ),
                 ],
               ),
             ),
           ),
           if (load.isBoosted) _BoostedBadge(),
-          _OverflowMenu(load: load, onReport: onReport, onDelete: onDelete, onEditDeferred: onEditDeferred, onBoost: onBoost, onMarkSold: onMarkSold),
+          _OverflowMenu(
+            load: load,
+            onReport: onReport,
+            onDelete: onDelete,
+            onEditDeferred: onEditDeferred,
+            onBoost: onBoost,
+            onMarkSold: onMarkSold,
+          ),
         ],
       ),
     );
@@ -246,11 +294,13 @@ class _TypeBadge extends StatelessWidget {
     final color = l.contains('buy')
         ? const Color(0xFF16A34A) // green
         : l.contains('sell')
-            ? const Color(0xFFEA580C) // orange
-            : Theme.of(context).colorScheme.primary;
+        ? const Color(0xFFEA580C) // orange
+        : Theme.of(context).colorScheme.primary;
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 3,
+      ),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.full),
@@ -258,12 +308,15 @@ class _TypeBadge extends StatelessWidget {
           BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4),
         ],
       ),
-      child: Text(label.toUpperCase(),
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3)),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
     );
   }
 }
@@ -272,16 +325,29 @@ class _BoostedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         gradient: context.nexveero.primaryGradient,
         borderRadius: BorderRadius.circular(AppRadius.full),
       ),
-      child: const Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.rocket_launch, size: 12, color: Colors.white),
-        SizedBox(width: 3),
-        Text('Boosted', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-      ]),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.rocket_launch, size: 12, color: Colors.white),
+          SizedBox(width: 3),
+          Text(
+            'Boosted',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -320,7 +386,12 @@ class _OverflowMenu extends StatelessWidget {
       context: context,
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, AppSpacing.md),
+          padding: const EdgeInsets.fromLTRB(
+            0,
+            AppSpacing.sm,
+            0,
+            AppSpacing.md,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,62 +409,75 @@ class _OverflowMenu extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-                child: Text('POST OPTIONS',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.6,
-                        color: nex.textSecondary)),
+                  AppSpacing.lg,
+                  0,
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                ),
+                child: Text(
+                  'POST OPTIONS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: nex.textSecondary,
+                  ),
+                ),
               ),
               if (load.isOwn) ...[
                 if (load.canEdit)
                   _SheetRow(
-                      icon: Icons.edit_outlined,
-                      tint: nex.gradientStart,
-                      title: 'Edit post',
-                      subtitle: 'Update photos, caption, or details',
-                      onTap: () => Navigator.of(ctx).pop('edit')),
+                    icon: Icons.edit_outlined,
+                    tint: nex.gradientStart,
+                    title: 'Edit post',
+                    subtitle: 'Update photos, caption, or details',
+                    onTap: () => Navigator.of(ctx).pop('edit'),
+                  ),
                 if (load.canBoost)
                   _SheetRow(
-                      icon: Icons.rocket_launch,
-                      tint: nex.gradientEnd,
-                      title: 'Boost post',
-                      subtitle: 'Feature it to more people',
-                      onTap: () => Navigator.of(ctx).pop('boost')),
+                    icon: Icons.rocket_launch,
+                    tint: nex.gradientEnd,
+                    title: 'Boost post',
+                    subtitle: 'Feature it to more people',
+                    onTap: () => Navigator.of(ctx).pop('boost'),
+                  ),
                 if (onMarkSold != null)
                   _SheetRow(
-                      icon: Icons.check_circle_outline,
-                      tint: nex.success,
-                      title: 'Mark as sold',
-                      subtitle: 'Close it to new requests',
-                      onTap: () => Navigator.of(ctx).pop('sold')),
+                    icon: Icons.check_circle_outline,
+                    tint: nex.success,
+                    title: 'Mark as sold',
+                    subtitle: 'Close it to new requests',
+                    onTap: () => Navigator.of(ctx).pop('sold'),
+                  ),
                 if (load.canDelete)
                   _SheetRow(
-                      icon: Icons.delete_outline,
-                      tint: Theme.of(ctx).colorScheme.error,
-                      title: 'Delete',
-                      subtitle: 'Remove this post',
-                      danger: true,
-                      onTap: () => Navigator.of(ctx).pop('delete')),
+                    icon: Icons.delete_outline,
+                    tint: Theme.of(ctx).colorScheme.error,
+                    title: 'Delete',
+                    subtitle: 'Remove this post',
+                    danger: true,
+                    onTap: () => Navigator.of(ctx).pop('delete'),
+                  ),
               ] else ...[
                 if (load.canReport)
                   _SheetRow(
-                      icon: Icons.flag_outlined,
-                      tint: Theme.of(ctx).colorScheme.error,
-                      title: 'Report',
-                      subtitle: 'Flag this post for review',
-                      onTap: () => Navigator.of(ctx).pop('report')),
+                    icon: Icons.flag_outlined,
+                    tint: Theme.of(ctx).colorScheme.error,
+                    title: 'Report',
+                    subtitle: 'Flag this post for review',
+                    onTap: () => Navigator.of(ctx).pop('report'),
+                  ),
                 // Admins/moderators can delete others' posts (backend grants
                 // can_delete); regular users never see this on others' posts.
                 if (load.canDelete)
                   _SheetRow(
-                      icon: Icons.delete_outline,
-                      tint: Theme.of(ctx).colorScheme.error,
-                      title: 'Delete',
-                      subtitle: 'Remove this post',
-                      danger: true,
-                      onTap: () => Navigator.of(ctx).pop('delete')),
+                    icon: Icons.delete_outline,
+                    tint: Theme.of(ctx).colorScheme.error,
+                    title: 'Delete',
+                    subtitle: 'Remove this post',
+                    danger: true,
+                    onTap: () => Navigator.of(ctx).pop('delete'),
+                  ),
               ],
             ],
           ),
@@ -439,7 +523,9 @@ class _SheetRow extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             Container(
@@ -456,17 +542,20 @@ class _SheetRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: danger
-                              ? Theme.of(context).colorScheme.error
-                              : null)),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: danger
+                          ? Theme.of(context).colorScheme.error
+                          : null,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: nex.textSecondary)),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: nex.textSecondary),
+                  ),
                 ],
               ),
             ),
@@ -484,7 +573,10 @@ class _Media extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(aspectRatio: 4 / 3, child: _NetworkCover(url: url));
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: _NetworkCover(url: url),
+    );
   }
 }
 
@@ -496,13 +588,16 @@ class _NetworkCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final full = url.startsWith('http') ? url : '${AppConfig.current.baseUrl}$url';
+    final full = url.startsWith('http')
+        ? url
+        : '${AppConfig.current.baseUrl}$url';
     return CachedNetworkImage(
       imageUrl: full,
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.cover,
-      placeholder: (_, _) => const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
+      placeholder: (_, _) =>
+          const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
       errorWidget: (_, _, _) =>
           const ImagePlaceholder(role: PlaceholderRole.post, radius: 0),
     );
@@ -559,7 +654,9 @@ class _MediaCarouselState extends State<_MediaCarousel> {
                     height: 5,
                     margin: const EdgeInsets.symmetric(horizontal: 2.5),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: i == _index ? 1 : 0.6),
+                      color: Colors.white.withValues(
+                        alpha: i == _index ? 1 : 0.6,
+                      ),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
@@ -585,12 +682,22 @@ class _FileChip extends StatelessWidget {
         color: context.nexveero.elevated,
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
-      child: Row(children: [
-        Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(child: Text(load.mediaMime ?? 'Attachment',
-            style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis)),
-      ]),
+      child: Row(
+        children: [
+          Icon(
+            Icons.description_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              load.mediaMime ?? 'Attachment',
+              style: Theme.of(context).textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -622,8 +729,11 @@ class _Actions extends StatelessWidget {
       // Ask/Share/Offer/Report on your own post).
       return Align(
         alignment: Alignment.centerLeft,
-        child: Text('Your post · ${load.status}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.nexveero.textSecondary)),
+        child: Text(
+          'Your post · ${load.status}',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.nexveero.textSecondary),
+        ),
       );
     }
 
@@ -631,67 +741,42 @@ class _Actions extends StatelessWidget {
     // columns, each an icon-on-top + label-below plain button (no box) — matching
     // the business card exactly. Ask · Share · Offer · Report. Report is inline
     // for other users' posts only (never on your own — guarded by !isOwn above).
+    final user = sl.isRegistered<AuthCubit>() ? sl<AuthCubit>().state.user : null;
     final secondary = <Widget>[
-      if (load.canAskQuestion && onAsk != null)
+      if (load.canAskQuestion && onAsk != null && (user?.canAsk ?? true))
         _ActionButton(
-            label: 'Ask',
-            icon: Icons.help_outline,
-            highlight: true,
-            onTap: onAsk!),
-      if (onShare != null)
-        _ActionButton(label: 'Share', icon: Icons.ios_share, onTap: onShare!),
+          label: 'Ask',
+          icon: Icons.help_outline,
+          highlight: true,
+          onTap: onAsk!,
+        ),
       // Once the viewer has offered, the action becomes "View offer" (opens the
       // existing offer chat); otherwise "Offer" when a new offer is allowed.
-      if (load.hasMyOffer && onViewOffer != null)
+      if (load.hasMyOffer && onViewOffer != null && (user?.canChat ?? true))
         _ActionButton(
-            label: 'View offer', icon: Icons.local_offer, onTap: onViewOffer!)
-      else if (load.canMakeOffer && onOffer != null)
+          label: 'View offer',
+          icon: Icons.local_offer,
+          onTap: onViewOffer!,
+        )
+      else if (load.canMakeOffer && onOffer != null && (user?.canOffer ?? true))
         _ActionButton(
-            label: 'Offer', icon: Icons.sell_outlined, onTap: onOffer!),
+          label: 'Offer',
+          icon: Icons.sell_outlined,
+          onTap: onOffer!,
+        ),
+      if (onShare != null)
+        _ActionButton(label: 'Share', icon: Icons.ios_share, onTap: onShare!),
       if (load.canReport && onReport != null)
         _ActionButton(
-            label: 'Report', icon: Icons.flag_outlined, onTap: onReport!),
+          label: 'Report',
+          icon: Icons.flag_outlined,
+          onTap: onReport!,
+        ),
     ];
 
-    final primary = _primaryCta(context);
-    final hasPrimary = primary is! SizedBox;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        primary,
-        if (secondary.isNotEmpty) ...[
-          if (hasPrimary) const SizedBox(height: AppSpacing.sm),
-          Row(children: [for (final a in secondary) Expanded(child: a)]),
-        ],
-      ],
+    return Row(
+      children: [for (final action in secondary) Expanded(child: action)],
     );
-  }
-
-  /// The primary CTA is dynamic: an existing chat → "Direct Message"; an
-  /// already-sent request → "Requested"; otherwise "Request this post".
-  Widget _primaryCta(BuildContext context) {
-    if (load.conversationId != null && onDirectMessage != null) {
-      return AppButton(
-        label: 'Direct Message',
-        icon: Icons.chat_bubble_outline,
-        onPressed: onDirectMessage,
-      );
-    }
-    if (load.viewerHasRequested) {
-      return const AppButton(
-        label: 'Requested',
-        icon: Icons.check,
-        variant: AppButtonVariant.tonal,
-        onPressed: null,
-      );
-    }
-    if (load.canMessage) {
-      return AppButton(
-          label: 'Request this post', icon: Icons.bolt, onPressed: onRequest);
-    }
-    // Messaging not allowed and no chat yet — the secondary bar stands in.
-    return const SizedBox.shrink();
   }
 }
 
@@ -700,11 +785,12 @@ class _Actions extends StatelessWidget {
 /// post_detail_page `_ActionIcon`): Ask is accent-tinted (highlight), the rest
 /// use onSurface; icon 22, label 9px 700 secondary.
 class _ActionButton extends StatelessWidget {
-  const _ActionButton(
-      {required this.label,
-      required this.icon,
-      required this.onTap,
-      this.highlight = false});
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.highlight = false,
+  });
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -726,14 +812,86 @@ class _ActionButton extends StatelessWidget {
           children: [
             Icon(icon, size: 22, color: color),
             const SizedBox(height: 3),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: nex.textSecondary)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: nex.textSecondary,
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PostCaption extends StatefulWidget {
+  const _PostCaption({required this.load});
+  final Load load;
+
+  @override
+  State<_PostCaption> createState() => _PostCaptionState();
+}
+
+class _PostCaptionState extends State<_PostCaption> {
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(_PostCaption oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.load.id != widget.load.id) _expanded = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final load = widget.load;
+    final description = [
+      load.title,
+      if ((load.body ?? '').isNotEmpty) load.body!,
+    ].join('\n');
+    if (description.isEmpty) return const SizedBox.shrink();
+    final style = Theme.of(context).textTheme.bodyMedium;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final span = TextSpan(
+          style: style,
+          children: [
+            if (load.author != null)
+              TextSpan(
+                text: '${load.author!.displayBusinessName}: ',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            TextSpan(text: description),
+          ],
+        );
+        final painter = TextPainter(
+          text: span,
+          maxLines: 3,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        painter.dispose();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              span,
+              maxLines: _expanded ? null : 3,
+              overflow: _expanded
+                  ? TextOverflow.visible
+                  : TextOverflow.ellipsis,
+            ),
+            if (overflows || _expanded)
+              TextButton(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Text(_expanded ? 'Show less' : 'Read more…'),
+              ),
+          ],
+        );
+      },
     );
   }
 }
